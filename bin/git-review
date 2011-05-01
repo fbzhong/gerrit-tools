@@ -440,12 +440,32 @@ openReview() {
     exit 2
   fi
 
-  ssh_url=$($GIT config remote.$REMOTE.url)
-  ssh_url=${ssh_url#ssh://}
-  ssh_url=${ssh_url#*@}
-  ssh_url=${ssh_url%/*}
-  ssh_url=${ssh_url%:*}
-  eval "$BROWSER http://$ssh_url/$CHANGE"
+  gerrit_host=
+  remote_url=$($GIT config remote.$REMOTE.url)
+
+  if [[ $remote_url = ssh://* ]]; then
+    gerrit_host=${remote_url#ssh://}
+    gerrit_host=${gerrit_host#*@}
+    gerrit_host=${gerrit_host%/*}
+    gerrit_host=${gerrit_host%:*}
+  else
+    # probably pushinsteadof config
+    protocol=${remote_url%://*}
+    remote_host=${remote_url#*://}
+    remote_host=${remote_host%%/*}
+    pushinsteadof=$($GIT config -l | grep pushinsteadof=$protocol://$remote_host)
+    if [[ $pushinsteadof ]]; then
+      gerrit_host=${pushinsteadof#*@}
+      gerrit_host=${gerrit_host%%:*}
+    fi
+  fi
+
+  if [[ $gerrit_host ]]; then
+    eval "$BROWSER http://$gerrit_host/$CHANGE"
+  else
+    warn "Could not get the URL of gerrit"
+    exit 2
+  fi
   exit 0
 }
 
