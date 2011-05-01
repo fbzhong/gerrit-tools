@@ -440,28 +440,29 @@ openReview() {
     exit 2
   fi
 
-  gerrit_host=
-  remote_url=$($GIT config remote.$REMOTE.url)
+  local url_line=$($GIT remote show -n origin | grep "Push  URL: " | head -n1)
+  local host_and_project=${url_line# *URL: }
 
-  if [[ $remote_url = ssh://* ]]; then
-    gerrit_host=${remote_url#ssh://}
-    gerrit_host=${gerrit_host#*@}
-    gerrit_host=${gerrit_host%/*}
-    gerrit_host=${gerrit_host%:*}
-  else
-    # probably pushinsteadof config
-    protocol=${remote_url%://*}
-    remote_host=${remote_url#*://}
-    remote_host=${remote_host%%/*}
-    pushinsteadof=$($GIT config -l | grep pushinsteadof=$protocol://$remote_host)
-    if [[ $pushinsteadof ]]; then
-      gerrit_host=${pushinsteadof#*@}
-      gerrit_host=${gerrit_host%%:*}
+  local host
+  local project
+  local port
+
+  if [[ "$host_and_project" =~ "ssh://" ]]; then
+    host_and_project=${host_and_project#ssh://}
+    local host_and_port=${host_and_project%/*}
+
+    if [[ "$host_and_port" =~ ":" ]]; then
+      host=${host_and_port%:*}
+      port=${host_and_port#*:}
+    else
+      host=${host_and_port}
     fi
+  else
+    host=${host_and_project%:*}
   fi
 
-  if [[ $gerrit_host ]]; then
-    eval "$BROWSER http://$gerrit_host/$CHANGE"
+  if [[ $host ]]; then
+    eval "$BROWSER http://$host/$CHANGE"
   else
     warn "Could not get the URL of gerrit"
     exit 2
