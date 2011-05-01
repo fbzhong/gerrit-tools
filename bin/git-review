@@ -284,7 +284,7 @@ resetReview() {
 }
 
 approveChange() {
-  local url_line=$($GIT remote show -n origin | grep "URL: " | head -n1)
+  local url_line=$($GIT remote show -n origin | grep "Push  URL: " | head -n1)
   local host_and_project=${url_line# *URL: }
 
   local host
