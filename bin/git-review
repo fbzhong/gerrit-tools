@@ -324,7 +324,7 @@ approveChange() {
   good "Approving '$LOG'..."
   ssh $host $port gerrit approve \
       --verified=+1 \
-      --code-review=+2 \
+      --code-review=+1 \
       --project=$project $CHANGE,$PATCH ||
     die "Unable to approve the commit"
 }
