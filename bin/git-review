@@ -475,8 +475,8 @@ abort_on_bad_repo_state() {
     die "You have local changes. Please do something with them before using $this"
   fi
 
-  $GIT svn info >/dev/null 2>/dev/null &&
-    die "$this does not support git-svn repositories."
+ # $GIT svn info >/dev/null 2>/dev/null &&
+  #  die "$this does not support git-svn repositories."
 }
 
 while true; do
