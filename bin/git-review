@@ -147,7 +147,7 @@ printUsage() {
   echo
   echo "  reset"
   echo "    Removes the current change branch created by the 'start' subcommand and switches"
-  echo "    back to master."
+  echo "    back to tracking branch."
   echo
   echo "  diff <change number> [<patch number> <patch number>]"
   echo "    Displays a diff of the last two patches applies to the given changeset, or between"
@@ -155,7 +155,7 @@ printUsage() {
   echo
   echo "  rebase [<change number>]"
   echo "    Rebases the latest patch for a given change number (or the current change branch)"
-  echo "    against master, then submits it as a new patch to that change. This helps deal with"
+  echo "    against tracking branch, then submits it as a new patch to that change. This helps deal with"
   echo "    Gerrit's \"Your change could not be merged due to a path conflict\" error message."
   echo
   echo "  open"
@@ -173,11 +173,19 @@ getBranchInfo() {
 
   TRACK=`$GIT config branch.$CURRENT.merge`
 
-  if [ -z "$TRACK" ]; then
-    TRACK=refs/heads/master
+  if [ -n "$TRACK" ]; then
+    TRACK=${TRACK#refs/heads/}
   fi
 
-  TRACK=${TRACK#refs/heads/}
+  if [ -z "$TRACK" ]; then
+	if [ -e "$GIT_DIR/TRACK" ]; then
+	  TRACK=$(cat "$GIT_DIR/TRACK")
+	elif [ -z "$TRACK" ]; then
+      TRACK=master
+    fi
+  fi
+
+  echo "$TRACK" > "$GIT_DIR/TRACK"
 }
 
 pushReview() {
@@ -211,7 +219,7 @@ pushReview() {
     change_args="$REMOTE HEAD:refs/changes/$change"
   fi
 
-  git push $change_args ||
+  $GIT push $change_args ||
     die "Could not push your changes for review. Perhaps you need to update first?"
 
   git_push_output=$(test -f $GIT_OUTPUT_FILE && cat $GIT_OUTPUT_FILE)
@@ -269,6 +277,7 @@ startReview() {
 # git review reset
 resetReview() {
   abort_on_bad_repo_state
+  getBranchInfo
 
   if [ ! -z "$@" ]; then
     warn "$this: unrecognized argument $1 for 'reset' subcommand"
@@ -278,8 +287,10 @@ resetReview() {
 
   # clean up after gerrit-cherry-pick if it failed
   rm -rf "$GIT_DIR/rebase-gerrit"
+  # clean up TRACK file
+  rm -rf "$GIT_DIR/TRACK"
 
-  git checkout master && git branch -D $CURRENT ||
+  $GIT checkout $TRACK && $GIT branch -D $CURRENT ||
     die "Unable to close the review branch $CURRENT"
 }
 
