@@ -446,11 +446,6 @@ openReview() {
     exit 2
   fi
 
-  if [[ -z "$BROWSER" ]]; then
-    warn "BROWSER is not set. Sorry."
-    exit 2
-  fi
-
   local url_line=$($GIT remote show -n origin | grep "Push  URL: " | head -n1)
   local host_and_project=${url_line# *URL: }
 
@@ -473,7 +468,12 @@ openReview() {
   fi
 
   if [[ $host ]]; then
-    eval "$BROWSER http://$host/$CHANGE"
+	  if [[ -z "$BROWSER" ]]; then
+		warn "BROWSER is not set. Sorry."
+		echo "http://$host/$CHANGE"
+	  else
+	    eval "$BROWSER http://$host/$CHANGE"
+	  fi
   else
     warn "Could not get the URL of gerrit"
     exit 2
