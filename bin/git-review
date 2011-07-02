@@ -172,10 +172,11 @@ printUsage() {
   echo
   echo "  diff [<patch number> [<patch number>]]"
   echo "    Depending of the number of arguments, displays a diff of"
-  echo "      (0) the last two patchsets"
-  echo "      (1) the given patchset und the last patchset"
-  echo "      (2) the given patchsets"
-  echo "    You can swap the two numbers to get an inverse diff"
+  echo "      (0) the last two patchsets."
+  echo "      (1) the given patchset und the last patchset."
+  echo "      (2) the given patchsets. You can swap the two numbers to get an inverse diff."
+  echo "      (3) a specific change specified with <change> <patchset1> <patchset2>. Giving a"
+  echo "          change number means you can use this command without being on a review branch"
   echo
   echo "  rebase [<change number>]"
   echo "    Rebases the latest patch for a given change number (or the current change branch)"
@@ -385,6 +386,11 @@ diffPatches() {
 	  ;;
 	2)
 	  local patch1=$1
+	  local patch2=$2
+	  ;;
+	3)
+	  local change=$1
+	  local patch1=$2
 	  local patch2=$2
 	  ;;
 	*)
