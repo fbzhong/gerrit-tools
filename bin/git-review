@@ -130,6 +130,7 @@ printShortUsage() {
   echo "Usage: $this [<options>] push [<change number>]"
   echo "   or: $this [<options>] <change number>"
   echo "   or: $this [<options>] reset"
+  echo "   or: $this [<options>] diff [<patchset1> [<patchset2>]]"
 }
 printUsage() {
   printShortUsage
@@ -169,14 +170,18 @@ printUsage() {
   echo "    Removes the current change branch created by the 'start' subcommand and switches"
   echo "    back to tracking branch."
   echo
-  echo "  diff <change number> [<patch number> <patch number>]"
-  echo "    Displays a diff of the last two patches applies to the given changeset, or between"
-  echo "    the given patches of that changeset."
+  echo "  diff [<patch number> [<patch number>]]"
+  echo "    Depending of the number of arguments, displays a diff of"
+  echo "      (0) the last two patchsets"
+  echo "      (1) the given patchset und the last patchset"
+  echo "      (2) the given patchsets"
+  echo "    You can swap the two numbers to get an inverse diff"
   echo
   echo "  rebase [<change number>]"
   echo "    Rebases the latest patch for a given change number (or the current change branch)"
-  echo "    against tracking branch, then submits it as a new patch to that change. This helps deal with"
-  echo "    Gerrit's \"Your change could not be merged due to a path conflict\" error message."
+  echo "    against tracking branch, then submits it as a new patch to that change."
+  echo "    This helps deal with Gerrit's \"Your change could not be merged due to a path"
+  echo "    conflict\" error message."
   echo
   echo "  open"
   echo "    Opens the currently checked-out Gerrit change's page in the browser (given by the"
@@ -363,27 +368,37 @@ approveChange() {
 diffPatches() {
   getBranchInfo
 
-  local change=$1
-  local patch1=$2
-  local patch2=$3
-
-  if [[ -z "$change" ]]; then
-    if get_change_number_from_branch; then
-      change=$CHANGE
-    else
-      die "You must specify a changeset (and optionally, patch numbers) to diff"
-    fi
-  fi
+  get_change_number_from_branch ||
+    die "Unable to get change number from $CURRENT"
+  local change=$CHANGE
 
   local changeref=refs/remotes/changes/${change:(-2)}/$change
 
-  if [[ -z "$patch1" ]] || [[ -z "$patch2" ]]; then
-    local patch2=$(patch_count_for_change $change)
-    local patch1=$((patch2 - 1))
-  fi
+  case $# in
+    0)
+	  local patch2=$(patch_count_for_change $change)
+	  local patch1=$((patch2 - 1))
+	  ;;
+	1)
+	  local patch2=$(patch_count_for_change $change)
+	  local patch1=$1
+	  ;;
+	2)
+	  local patch1=$1
+	  local patch2=$2
+	  ;;
+	*)
+	  printShortUsage
+	  die "too many arguments"
+	  ;;
+  esac
 
   if [[ "$patch1" = "$patch2" ]]; then
     die "Only one patchset--nothing to diff!"
+  fi
+
+  if [[ "$verbose" = true ]]; then
+    good "Diffing patchset $patch1 vs patchset $patch2"
   fi
 
   local branch1="r$change,$patch1"
@@ -402,7 +417,9 @@ diffPatches() {
     die "Unable to apply ±$branch2 on top of $TRACK"
 
   # actually show the diff
-  git diff --src-prefix=$branch1: --dst-prefix=$branch2: --color $branch1 $branch2 | less -rf
+  git diff --src-prefix=$branch1: --dst-prefix=$branch2: --color $branch1 $branch2 > $GIT_OUTPUT_FILE
+  less -rf $GIT_OUTPUT_FILE
+  rm -f $GIT_OUTPUT_FILE
 
   git checkout "$CURRENT" >/dev/null 2>&1 ||
     die "Unable to switch back to $CURRENT"
@@ -529,7 +546,7 @@ while true; do
     -q | --quiet)
       verbose=false
       ;;
-    -h | --help)
+    -h | --help | help)
       printUsage
       exit
       ;;
