@@ -29,24 +29,44 @@ good() {
 #git stuff
 GIT=$(which git)
 
+if [[ -z "$GIT" ]]; then
+	die "git is not installed"
+fi
+
+GERRIT_CHERRY_PICK=$(which gerrit-cherry-pick)
+
+if [[ -z "$GERRIT_CHERRY_PICK" ]]; then
+	die "gerrit-cherry-pick is not installed"
+fi
+
 GIT_OUTPUT_FILE="/tmp/git_output$$"
 
-GIT_DIR=$(git rev-parse --git-dir 2>/dev/null)
+GIT_DIR=$($GIT rev-parse --git-dir 2>/dev/null)
 
-if [ -z "$GIT_DIR" ]; then
+if [[ -z "$GIT_DIR" ]]; then
   die "$this can only be run from a git repository."
 fi
 
-CURRENT=$(git symbolic-ref -q HEAD || git rev-parse HEAD)
+CURRENT=$($GIT symbolic-ref -q HEAD || $GIT rev-parse HEAD)
 CURRENT=${CURRENT#refs/heads/}
 
 git() {
-  if [ "$verbose" = true ]; then
+  if [[ "$verbose" = true ]]; then
     echo -e "+ ${GREEN}git $@${NO_COLOR}"
   fi
 
-  if [ "$run" = true ]; then
+  if [[ "$run" = true ]]; then
     $GIT $@ 2>&1 | tee /dev/tty > $GIT_OUTPUT_FILE
+    return ${PIPESTATUS[0]}
+  fi
+}
+gerrit-cherry-pick() {
+  if [[ "$verbose" = true ]]; then
+    echo -e "+ ${GREEN}gerrit-cherry-pick $@${NO_COLOR}"
+  fi
+
+  if [[ "$run" = true ]]; then
+    $GERRIT_CHERRY_PICK $@ 2>&1 | tee /dev/tty > $GIT_OUTPUT_FILE
     return ${PIPESTATUS[0]}
   fi
 }
@@ -63,19 +83,19 @@ no_changes () {
 }
 
 check_stash() {
-  if [ "$stashed" = true ]; then
+  if [[ "$stashed" = true ]]; then
     warn "Your stashed changes were not applied because an error occurred. Don't panic. They are not lost. Look for them in \"git stash list\"."
   fi
 }
 
 is_integer() {
-  [ "$1" -eq "$1" ] > /dev/null 2>&1
+  [[ "$1" -eq "$1" ]] > /dev/null 2>&1
   return $?
 }
 
 is_review_branch() {
   local branch=$1
-  if [ "${branch:0:1}" = "r" ]; then
+  if [[ "${branch:0:1}" = "r" ]]; then
     local change=${branch:1}
     if is_integer $change; then
       return 0
@@ -87,10 +107,10 @@ is_review_branch() {
 get_change_number_from_branch() {
   if is_review_branch $CURRENT; then
     CHANGE=${CURRENT:1}
-    if [ $run = true ]; then
+    if [[ $verbose = true ]]; then
       good "Using change number $CHANGE from branch name"
-      return 0
     fi
+    return 0
   fi
   return 1
 }
@@ -99,7 +119,7 @@ patch_count_for_change() {
   local change_id=$1
   local hash=$(($change_id % 100))
   case $hash in
-  [0-9]) hash="0$hash" ;;
+  	[0-9]) hash="0$hash" ;;
   esac
 
   $GIT ls-remote $REMOTE "refs/changes/$hash/$change_id/*" | \
@@ -167,20 +187,20 @@ printUsage() {
 getBranchInfo() {
   REMOTE=`$GIT config branch.$CURRENT.remote`
 
-  if [ -z "$REMOTE" ]; then
+  if [[ -z "$REMOTE" ]]; then
     REMOTE=origin
   fi
 
   TRACK=`$GIT config branch.$CURRENT.merge`
 
-  if [ -n "$TRACK" ]; then
+  if [[ -n "$TRACK" ]]; then
     TRACK=${TRACK#refs/heads/}
   fi
 
-  if [ -z "$TRACK" ]; then
-	if [ -e "$GIT_DIR/TRACK" ]; then
+  if [[ -z "$TRACK" ]]; then
+	if [[ -e "$GIT_DIR/TRACK" ]]; then
 	  TRACK=$(cat "$GIT_DIR/TRACK")
-	elif [ -z "$TRACK" ]; then
+	elif [[ -z "$TRACK" ]]; then
       TRACK=master
     fi
   fi
@@ -193,7 +213,7 @@ pushReview() {
   getBranchInfo
 
   local change=$1
-  if [ -z "$change" ]; then
+  if [[ -z "$change" ]]; then
     if get_change_number_from_branch; then
       change=$CHANGE
     fi
@@ -203,17 +223,17 @@ pushReview() {
   local CHANGESETS=$($GIT rev-list $REMOTE/$TRACK..HEAD | wc -l)
   local CHANGESETS=${CHANGESETS//[[:space:]]}
 
-  if [ "$run" = true ]; then
-    if [ "$CHANGESETS" = "0" ]; then
+  if [[ "$run" = true ]]; then
+    if [[ "$CHANGESETS" = "0" ]]; then
       die "You have no changes to review. Are you on the right branch?"
-    elif [ "$CHANGESETS" != "1" ]; then
+    elif [[ "$CHANGESETS" != "1" ]]; then
       die "You have $CHANGESETS changes, but you should only push one at a time. Did you forget to squash your commits?"
     fi
   fi
 
   local change_args=''
 
-  if [ -z "$change" ]; then
+  if [[ -z "$change" ]]; then
     change_args="$REMOTE HEAD:refs/for/$TRACK"
   else
     change_args="$REMOTE HEAD:refs/changes/$change"
@@ -224,19 +244,19 @@ pushReview() {
 
   git_push_output=$(test -f $GIT_OUTPUT_FILE && cat $GIT_OUTPUT_FILE)
 
-  if [ "$CURRENT" = "master" ]; then
+  if [[ "$CURRENT" = "master" ]]; then
     git reset --hard $REMOTE/$TRACK ||
       die "Could not reset your $TRACK branch to $REMOTE/$TRACK."
   fi
 
-  if [ "$run" = true ]; then
+  if [[ "$run" = true ]]; then
     url=$(echo "$git_push_output" | grep http | head -n1)
 
     if [[ ! -z "$BROWSER" && ! -z "$url" ]]; then
       eval "$BROWSER $url"
     fi
 
-    if [ "$CURRENT" = "master" ]; then
+    if [[ "$CURRENT" = "master" ]]; then
       good "Successfully pushed '$LOG' for review and reset $TRACK"
     else
       good "Successfully pushed '$LOG' for review"
@@ -268,7 +288,7 @@ startReview() {
   gerrit-cherry-pick --latest $REMOTE $change ||
     die "Unable to apply ±$change on top of $TRACK"
 
-  if [ "$run" = true ]; then
+  if [[ "$verbose" = true ]]; then
     good "Successfully cherry-picked ±$change so you can begin reviewing it"
   fi
 }
@@ -279,7 +299,7 @@ resetReview() {
   abort_on_bad_repo_state
   getBranchInfo
 
-  if [ ! -z "$@" ]; then
+  if [[ ! -z "$@" ]]; then
     warn "$this: unrecognized argument $1 for 'reset' subcommand"
     printUsage
     exit 2
@@ -290,7 +310,7 @@ resetReview() {
   # clean up TRACK file
   rm -rf "$GIT_DIR/TRACK"
 
-  $GIT checkout $TRACK && $GIT branch -D $CURRENT ||
+  git checkout $TRACK && $GIT branch -D $CURRENT ||
     die "Unable to close the review branch $CURRENT"
 }
 
@@ -321,7 +341,7 @@ approveChange() {
   fi
 
   port=${port%/*}
-  if [ ! -z "$port" ]; then
+  if [[ ! -z "$port" ]]; then
     port="-p $port"
   fi
 
@@ -347,7 +367,7 @@ diffPatches() {
   local patch1=$2
   local patch2=$3
 
-  if [ -z "$change" ]; then
+  if [[ -z "$change" ]]; then
     if get_change_number_from_branch; then
       change=$CHANGE
     else
@@ -357,12 +377,12 @@ diffPatches() {
 
   local changeref=refs/remotes/changes/${change:(-2)}/$change
 
-  if [ -z "$patch1" ] || [ -z "$patch2" ]; then
+  if [[ -z "$patch1" ]] || [[ -z "$patch2" ]]; then
     local patch2=$(patch_count_for_change $change)
     local patch1=$((patch2 - 1))
   fi
 
-  if [ "$patch1" = "$patch2" ]; then
+  if [[ "$patch1" = "$patch2" ]]; then
     die "Only one patchset--nothing to diff!"
   fi
 
@@ -370,24 +390,24 @@ diffPatches() {
   local branch2="r$change,$patch2"
 
   # create a branch for patch1
-  $GIT checkout -b $branch1 $TRACK >/dev/null 2>&1 ||
+  git checkout -b $branch1 $TRACK >/dev/null 2>&1 ||
     die "Unable to create a new branch '$branch1'"
   gerrit-cherry-pick $REMOTE $change/$patch1 >/dev/null 2>&1 ||
     die "Unable to apply ±$branch1 on top of $TRACK"
 
   # create a branch for patch2
-  $GIT checkout -b $branch2 $TRACK >/dev/null 2>&1 ||
+  git checkout -b $branch2 $TRACK >/dev/null 2>&1 ||
     die "Unable to create a new branch '$branch2'"
   gerrit-cherry-pick $REMOTE $change/$patch2 >/dev/null 2>&1 ||
     die "Unable to apply ±$branch2 on top of $TRACK"
 
   # actually show the diff
-  $GIT diff --src-prefix=$branch1: --dst-prefix=$branch2: --color $branch1 $branch2 | less -rf
+  git diff --src-prefix=$branch1: --dst-prefix=$branch2: --color $branch1 $branch2 | less -rf
 
-  $GIT checkout "$CURRENT" >/dev/null 2>&1 ||
+  git checkout "$CURRENT" >/dev/null 2>&1 ||
     die "Unable to switch back to $CURRENT"
 
-  $GIT branch -D $branch1 $branch2 >/dev/null 2>&1 ||
+  git branch -D $branch1 $branch2 >/dev/null 2>&1 ||
     die "Unable to delete temporary patch branches"
 }
 
@@ -395,10 +415,10 @@ rebaseReview() {
   abort_on_bad_repo_state
 
   local change=$1
-  if [ -z "$change" ]; then
+  if [[ -z "$change" ]]; then
     if is_review_branch $CURRENT; then
       local change=${CURRENT:1}
-      if [ $run = true ]; then
+      if [[ $verbose = true ]]; then
         good "Using change number $change from branch name"
       fi
     else
@@ -439,7 +459,7 @@ openReview() {
 
   CHANGE=$1
 
-  if [[ $CHANGE ]]; then
+  if [[ ! -z $CHANGE ]]; then
     echo "Using change $CHANGE from command line"
   elif ! get_change_number_from_branch; then
     warn "$CURRENT is not a review branch"
