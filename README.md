@@ -1,6 +1,7 @@
 # gerrit Tools
 
 A few scripts to make code review via [Gerrit Code Review](http://gerrit.googlecode.com) easier for developers.
+They are improved and maintained to fit the needs of the [TYPO3](http://typo3.org) review workflow.
 
 ## gerrit-cherry-pick
 
