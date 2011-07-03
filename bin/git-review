@@ -164,8 +164,16 @@ printUsage() {
 	echo "  update"
 	echo "    Updates the review branch that you're currently on to the latest patch."
 	echo
-	echo "  approve"
+	echo "  approve [-r|-c|--code-review <+1>] [-v|--verified <+1>] [-m [Message]]"
 	echo "    Approves the current patch but does not merge it."
+	echo "    You can select your vote by giving them as argument. E.g. approve -r +2 -v -1 will"
+	echo "    result in voting +2 for code review and -1 for verified."
+	echo "    You can specify a message with -m. It must be the last parameter and anything behind"
+	echo "    it will be included in the message. If you leave it empty, you will be promped to"
+	echo "    write a line. Keep in mind that multiline commands are not supported and special"
+	echo "    characters (\%\"') will be escaped by bash."
+	echo "    All parameters are optional. By default approve will vote both verified and"
+	echo "    code-review +1 without supplying a message."
 	echo
 	echo "  reset"
 	echo "    Removes the current change branch created by the 'start' subcommand and switches"
@@ -177,7 +185,7 @@ printUsage() {
 	echo "      (1) the given patchset und the last patchset."
 	echo "      (2) the given patchsets. You can swap the two numbers to get an inverse diff."
 	echo "      (3) a specific change specified with <change> <patchset1> <patchset2>. Giving a"
-	echo "          change number means you can use this command without being on a review branch"
+	echo "          change number means you can use this command without being on a review branch."
 	echo
 	echo "  rebase [<change number>]"
 	echo "    Rebases the latest patch for a given change number (or the current change branch)"
@@ -214,6 +222,43 @@ getBranchInfo() {
 
 	echo "$TRACK" > "$GIT_DIR/TRACK"
 }
+
+
+parseApprove() {
+	CODE_REVIEW="+1"
+	VERIFIED="+1"
+	MESSAGE=""
+
+	while true; do
+		arg=$1
+		shift
+		test -z "$arg" && break;
+
+		case $arg in
+			-r | -c | --code-review)
+				if [[ -n "$1" ]]; then
+					CODE_REVIEW=$1
+					shift
+				fi
+				;;
+			-v | --verified)
+				if [[ -n $1 ]]; then
+					VERIFIED=$1
+					shift
+				fi
+				;;
+			-m | --message)
+				if [[ -n $@ ]]; then
+					MESSAGE=$@
+				else
+					warn "You did not supply a message. Do it now or press return to not submit a message."
+				    read MESSAGE
+				fi
+				;;
+		esac
+	done
+}
+
 
 pushReview() {
 	abort_on_bad_repo_state
@@ -360,11 +405,23 @@ approveChange() {
 
 	local LOG=$($GIT log --pretty="format:%s" $REMOTE/$TRACK..HEAD)
 	good "Approving '$LOG'..."
-	ssh $host $port gerrit approve \
-		--verified=+1 \
-		--code-review=+1 \
-		--project=$project $CHANGE,$PATCH ||
-		die "Unable to approve the commit"
+
+	parseApprove $@
+
+	local CMD="ssh $host $port gerrit approve"
+	CMD="$CMD --verified=$VERIFIED"
+	CMD="$CMD --code-review=$CODE_REVIEW"
+	CMD="$CMD --project=$project $CHANGE,$PATCH"
+	if [[ -n $MESSAGE ]]; then
+		CMD="$CMD --message=\"$MESSAGE\""
+	fi
+
+	if [[ "$run" = true ]]; then
+		$($CMD) ||
+			die "Unable to approve the commit"
+	else
+		warn "running: $CMD"
+	fi
 }
 
 diffPatches() {
@@ -578,7 +635,7 @@ while true; do
 		exit
 		;;
 	approve)
-		approveChange
+		approveChange $@
 		exit
 		;;
 	update)
