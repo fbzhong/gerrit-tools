@@ -596,67 +596,66 @@ while true; do
 	shift
 	test -z "$arg" && break;
 
-	case $arg
-		in
+	case $arg in
 		-e | --explain | --dry-run)
-		echo "$this: using explain-only mode"
-		explain=true
-		verbose=true
-		run=false
-		;;
-	-v | --verbose)
-		verbose=true
-		;;
-	-q | --quiet)
-		verbose=false
-		;;
-	-h | --help | help)
-		printUsage
-		exit
-		;;
-	start)
-		startReview $1
-		exit
-		;;
-	reset)
-		resetReview $@
-		exit
-		;;
-	push)
-		pushReview $1
-		exit
-		;;
-	diff)
-		diffPatches $1 $2 $3
-		exit
-		;;
-	rebase)
-		rebaseReview $1
-		exit
-		;;
-	approve)
-		approveChange $@
-		exit
-		;;
-	update)
-		updateReview
-		exit
-		;;
-	open)
-		openReview $1
-		exit
-		;;
-	*)
-		if is_integer $arg; then
-			startReview $arg
-			exit
-		else
-			warn "$this: unrecognized option or subcommand $arg"
+			echo "$this: using explain-only mode"
+			explain=true
+			verbose=true
+			run=false
+			;;
+		-v | --verbose)
+			verbose=true
+			;;
+		-q | --quiet)
+			verbose=false
+			;;
+		-h | --help | help)
 			printUsage
-			exit 2
-		fi
-		;;
-esac
+			exit
+			;;
+		start)
+			startReview $1
+			exit
+			;;
+		reset)
+			resetReview $@
+			exit
+			;;
+		push)
+			pushReview $1
+			exit
+			;;
+		diff)
+			diffPatches $1 $2 $3
+			exit
+			;;
+		rebase)
+			rebaseReview $1
+			exit
+			;;
+		approve)
+			approveChange $@
+			exit
+			;;
+		update)
+			updateReview
+			exit
+			;;
+		open)
+			openReview $1
+			exit
+			;;
+		*)
+			if is_integer $arg; then
+				startReview $arg
+				exit
+			else
+				warn "$this: unrecognized option or subcommand $arg"
+				printUsage
+				exit 2
+			fi
+			;;
+	esac
 done
 
 # no subcommand given
