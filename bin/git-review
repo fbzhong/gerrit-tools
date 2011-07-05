@@ -151,7 +151,7 @@ printUsage() {
 	echo "    If you are working on a non-tracking branch, that branch will be left alone."
 	echo
 	echo "    Given a change number, the current patch will replace the existing one, following"
-	echo "    the same reset rules as above."
+	echo "    the same reset rules as above. The change number must be an integer."
 	echo "    If you give a topic with -t <topic> it will push into according topic"
 	echo "    You can only specify either one."
 	echo
@@ -271,7 +271,11 @@ pushReview() {
 		if [[ "$1" = "-t" ]]; then
 			local topic=$2
 		else
-			local change=$1
+			if is_integer $1; then
+				local change=$1
+			else
+				die "The change number must be an integer \n Use -t to specify a topic"
+			fi
 		fi
 	else
 		if get_change_number_from_branch; then
