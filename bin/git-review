@@ -127,7 +127,7 @@ patch_count_for_change() {
 }
 
 printShortUsage() {
-	echo "Usage: $this [<options>] push [<change number>]"
+	echo "Usage: $this [<options>] push [<change number>]|[-t <topic>]"
 	echo "   or: $this [<options>] <change number>"
 	echo "   or: $this [<options>] reset"
 	echo "   or: $this [<options>] diff [<patchset1> [<patchset2>]]"
@@ -145,16 +145,19 @@ printUsage() {
 	echo "  $this assists in code reviews with gerrit, both pushing or pulling changesets"
 	echo "    to review."
 	echo
-	echo "  push [<change number>]"
+	echo "  push [<change number>]|[-t <topic>]"
 	echo "    Pushes a single patch to gerrit for review. If your HEAD is a tracking branch"
 	echo "    $this will reset it to the remote branch after successfully pushing the changeset."
 	echo "    If you are working on a non-tracking branch, that branch will be left alone."
 	echo
 	echo "    Given a change number, the current patch will replace the existing one, following"
 	echo "    the same reset rules as above."
+	echo "    If you give a topic with -t <topic> it will push into according topic"
+	echo "    You can only specify either one."
 	echo
 	echo "    NOTE: If the BROWSER environment variable is set, the Gerrit page for the pushed"
-	echo "    change will be opened in that browser (e.g. 'open' or '/usr/local/bin/firefox')."
+	echo "    change will be opened in that browser (e.g. 'open' or '/usr/local/bin/firefox'),"
+	echo "    otherwise the URL will be displayed."
 	echo
 	echo "  <change number>"
 	echo "    Applies the latest patch for the change at <change number> on top of the current"
@@ -264,8 +267,13 @@ pushReview() {
 	abort_on_bad_repo_state
 	getBranchInfo
 
-	local change=$1
-	if [[ -z "$change" ]]; then
+	if [[ -n "$1" ]]; then
+		if [[ "$1" = "-t" ]]; then
+			local topic=$2
+		else
+			local change=$1
+		fi
+	else
 		if get_change_number_from_branch; then
 			change=$CHANGE
 		fi
@@ -287,16 +295,19 @@ pushReview() {
 
 	if [[ -z "$change" ]]; then
 		change_args="$REMOTE HEAD:refs/for/$TRACK"
+		if [[ -n "$topic" ]]; then
+			change_args="$change_args/$topic"
+		fi
 	else
 		change_args="$REMOTE HEAD:refs/changes/$change"
 	fi
 
-	$GIT push $change_args ||
+	git push $change_args ||
 		die "Could not push your changes for review. Perhaps you need to update first?"
 
 	git_push_output=$(test -f $GIT_OUTPUT_FILE && cat $GIT_OUTPUT_FILE)
 
-	if [[ "$CURRENT" = "master" ]]; then
+	if [[ "$CURRENT" = "$TRACK" ]]; then
 		git reset --hard $REMOTE/$TRACK ||
 			die "Could not reset your $TRACK branch to $REMOTE/$TRACK."
 	fi
@@ -304,11 +315,15 @@ pushReview() {
 	if [[ "$run" = true ]]; then
 		url=$(echo "$git_push_output" | grep http | head -n1)
 
-		if [[ ! -z "$BROWSER" && ! -z "$url" ]]; then
-			eval "$BROWSER $url"
+		if [[ -n "$url" ]]; then
+			if [[ -n "$BROWSER" ]]; then
+				eval "$BROWSER $url"
+			else
+				good $url
+			fi
 		fi
 
-		if [[ "$CURRENT" = "master" ]]; then
+		if [[ "$CURRENT" = "$TRACK" ]]; then
 			good "Successfully pushed '$LOG' for review and reset $TRACK"
 		else
 			good "Successfully pushed '$LOG' for review"
@@ -622,7 +637,7 @@ while true; do
 			exit
 			;;
 		push)
-			pushReview $1
+			pushReview $1 $2
 			exit
 			;;
 		diff)
