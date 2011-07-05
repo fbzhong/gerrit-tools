@@ -89,7 +89,7 @@ check_stash() {
 }
 
 is_integer() {
-	[[ "$1" -eq "$1" ]] > /dev/null 2>&1
+	[[ "$1" = [0-9]* ]] > /dev/null 2>&1
 	return $?
 }
 
