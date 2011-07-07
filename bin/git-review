@@ -167,14 +167,12 @@ printUsage() {
 	echo "  update"
 	echo "    Updates the review branch that you're currently on to the latest patch."
 	echo
-	echo "  approve [-r|-c|--code-review <+1>] [-v|--verified <+1>] [-m [Message]]"
+	echo "  approve [-r|-c|--code-review <+1>] [-v|--verified <+1>] [-m]"
 	echo "    Approves the current patch but does not merge it."
 	echo "    You can select your vote by giving them as argument. E.g. approve -r +2 -v -1 will"
 	echo "    result in voting +2 for code review and -1 for verified."
-	echo "    You can specify a message with -m. It must be the last parameter and anything behind"
-	echo "    it will be included in the message. If you leave it empty, you will be promped to"
-	echo "    write a line. Keep in mind that multiline commands are not supported and special"
-	echo "    characters (\%\"') will be escaped by bash."
+	echo "    You can specify a message with -m. You will be promped to enter one."
+	echo "    Hit return to not send a message."
 	echo "    All parameters are optional. By default approve will vote both verified and"
 	echo "    code-review +1 without supplying a message."
 	echo
@@ -251,12 +249,8 @@ parseApprove() {
 				fi
 				;;
 			-m | --message)
-				if [[ -n $@ ]]; then
-					MESSAGE=$@
-				else
-					warn "You did not supply a message. Do it now or press return to not submit a message."
-				    read MESSAGE
-				fi
+				good "Supply a message and press return when you are done. Hit return to not send a message."
+				read MESSAGE
 				;;
 		esac
 	done
