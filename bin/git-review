@@ -470,7 +470,7 @@ diffPatches() {
 			;;
 	esac
 
-	if [[ "$patch1" = "$patch2" ]]; then
+	if [[ "$patch1" = "$patch2" ]] || [[ "$patch1" = 0 ]]; then
 		die "Only one patchset--nothing to diff!"
 	fi
 
