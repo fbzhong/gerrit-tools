@@ -166,6 +166,9 @@ DESCRIPTION
 
   push
     Pushes a single patch (or - if confirmed - multiple patches) to gerrit for review.
+    If you are not on a review branch, you need to confirm the branch to push to and
+    you may choose a topic.
+
     If your HEAD is a tracking branch $this will promt to reset it to the remote
     branch after successfully pushing the changeset.
     If you are working on a non-tracking branch, that branch will be left alone.
@@ -217,10 +220,10 @@ DESCRIPTION
     This helps deal with Gerrit\'s "Your change could not be merged due to a path
     conflict" error message.
 
-  open <change id>
+  open <change number>
     Prints the current review URL. If the BROWSER variable is set, it will use it to
     open the URL in the your specified browser.
-    If a change id is given, it will use that instead of trying to automatically
+    If a change number is given, it will use that instead of trying to automatically
     determine it bases on the current branch.
 EOF
 }
@@ -517,28 +520,21 @@ diffPatches() {
 rebaseReview() {
 	abort_on_bad_repo_state
 
-	local change=$1
-	if [[ -z "$change" ]]; then
-		if is_review_branch $CURRENT; then
-			local change=${CURRENT:1}
-			if [[ $verbose = true ]]; then
-				good "Using change number $change from branch name"
-			fi
-		else
-			die "Please provide a change number to rebase (see help for more info)"
-		fi
+	if [[ -z "$CHANGE" ]]; then
+		printShortUsage
+		die "Please provide a change number to rebase."
 	fi
 
 	if ! is_review_branch $CURRENT; then
 		# if not already on a review branch, fetch and check it out
-		startReview $change
+		startReview
 	fi
 
 	# try to push this patch along
-	pushReview $change
+	pushReview
 
 	# reset if we weren't already on a review branch
-	if is_review_branch $CURRENT; then
+	if ! is_review_branch $CURRENT; then
 		resetReview
 	fi
 }
@@ -552,9 +548,9 @@ updateReview() {
 
 	abort_on_bad_repo_state
 
-	local change=${CURRENT:1}
+	CHANGE=${CURRENT:1}
 	resetReview
-	startReview $change
+	startReview
 }
 
 openReview() {
@@ -651,16 +647,21 @@ while true; do
 		start)
 			if is_integer $1; then
 				CHANGE=$1
+			else
+				die "The change number must be an integer."
 			fi
 			startReview
 			exit
 			;;
 		reset)
+			if [[ $1 != "-f" ]]; then
+				die "Only -f may be use as an argument for reset"
+			fi
 			resetReview $1
 			exit
 			;;
 		push)
-			pushReview $1 $2
+			pushReview
 			exit
 			;;
 		diff)
@@ -668,11 +669,16 @@ while true; do
 			exit
 			;;
 		rebase)
-			rebaseReview $1
+			if is_integer $1; then
+				CHANGE=$1
+			else
+				die "The change number must be an integer."
+			fi
+			rebaseReview
 			exit
 			;;
 		approve)
-			approveChange $@
+			approveChange
 			exit
 			;;
 		update)
@@ -682,6 +688,8 @@ while true; do
 		open)
 			if is_integer $1; then
 				CHANGE=$1
+			else
+				die "The change number must be an integer."
 			fi
 			openReview
 			exit
