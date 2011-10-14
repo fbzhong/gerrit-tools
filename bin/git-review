@@ -85,12 +85,6 @@ no_changes () {
 		$GIT diff-files --quiet
 }
 
-check_stash() {
-	if [[ "$stashed" = true ]]; then
-		warn "Your stashed changes were not applied because an error occurred. Don't panic. They are not lost. Look for them in \"git stash list\"."
-	fi
-}
-
 is_integer() {
 	[[ "$1" = [0-9]* ]] > /dev/null 2>&1
 	return $?
@@ -105,6 +99,23 @@ is_review_branch() {
 		fi
 	fi
 	return 1
+}
+
+ask_yes_no() {
+	while true; do
+		read -p "$1 [y/n]: " choice
+			case $choice in
+				y|Y|yes|Yes|YES)
+					return 0
+					;;
+				n|no|No|NO)
+					return 1
+					;;
+				*)
+					warn "Please choose either y or n"
+					;;
+			esac
+	done
 }
 
 get_change_number_from_branch() {
@@ -131,7 +142,7 @@ patch_count_for_change() {
 
 printShortUsage() {
 	cat << EOF
-Usage: $this [<options>] push [<change number>]|[-t <topic>]
+Usage: $this [<options>] push
    or: $this [<options>] <change number>
    or: $this [<options>] reset
    or: $this [<options>] diff [<patchset1> [<patchset2>]]
@@ -145,23 +156,23 @@ printUsage() {
 OPTIONS
   -h  --help                  Show this message
   -v  --verbose               Show all commands before running them (default: on)
-  -q  --quiet                 Don't display commands before running them (default: off)
-  -e  --explain  --dry-run    Don't actually run commands (default: off)
+  -q  --quiet                 Don\'t display commands before running them (default: off)
+  -e  --explain  --dry-run    Don\'t actually run commands (default: off)
   -c <change number>          Force this change number (default: autodetect)
 
 DESCRIPTION
   $this assists in code reviews with gerrit, both pushing or pulling changesets
     to review.
 
-  push [<change number>]|[-t <topic>]
-    Pushes a single patch to gerrit for review. If your HEAD is a tracking branch
-    $this will reset it to the remote branch after successfully pushing the changeset.
+  push
+    Pushes a single patch (or - if confirmed - multiple patches) to gerrit for review.
+    If your HEAD is a tracking branch $this will promt to reset it to the remote
+    branch after successfully pushing the changeset.
     If you are working on a non-tracking branch, that branch will be left alone.
 
-    Given a change number, the current patch will replace the existing one, following
-    the same reset rules as above. The change number must be an integer.
-    If you give a topic with -t <topic> it will push into according topic
-    You can only specify either one.
+    If you are on a review branch or if you have specified a change number with -c
+    (see above), the current patch will be added as a new patchset, following
+    the same reset rules as above.
 
     NOTE: If the BROWSER environment variable is set, the Gerrit page for the pushed
     change will be opened in that browser (e.g. "open" or "/usr/local/bin/firefox"),
@@ -169,11 +180,11 @@ DESCRIPTION
 
   <change number>
     Applies the latest patch for the change at <change number> on top of the current
-    branch, if it's a tracking branch, or master on a branch named for <change number>,
+    branch, if it\'s a tracking branch, or master on a branch named for <change number>,
     allowing you to review the change.
 
   update
-    Updates the review branch that you're currently on to the latest patch.
+    Updates the review branch that you\'re currently on to the latest patch.
 
   approve [-r|-c|--code-review <+1>] [-v|--verified <+1>] [-m]
     Approves the current patch but does not merge it.
@@ -274,23 +285,6 @@ parseApprove() {
 
 pushReview() {
 	abort_on_bad_repo_state
-	getBranchInfo
-
-	if [[ -n "$1" ]]; then
-		if [[ "$1" = "-t" ]]; then
-			local topic=$2
-		else
-			if is_integer $1; then
-				local change=$1
-			else
-				die "The change number must be an integer \n Use -t to specify a topic"
-			fi
-		fi
-	else
-		if get_change_number_from_branch; then
-			change=$CHANGE
-		fi
-	fi
 
 	local LOG=$($GIT log --pretty="format:%s" $REMOTE/$TRACK..HEAD)
 	local CHANGESETS=$($GIT rev-list $REMOTE/$TRACK..HEAD | wc -l)
@@ -300,19 +294,27 @@ pushReview() {
 		if [[ "$CHANGESETS" = "0" ]]; then
 			die "You have no changes to review. Are you on the right branch?"
 		elif [[ "$CHANGESETS" != "1" ]]; then
-			die "You have $CHANGESETS changes, but you should only push one at a time. Did you forget to squash your commits?"
+			warn "You have $CHANGESETS changes, but you should only push one at a time. Did you forget to squash your commits?"
+			if ! ask_yes_no "Continue?"; then
+				die "Existing"
+			fi
 		fi
 	fi
 
+
 	local change_args=''
 
-	if [[ -z "$change" ]]; then
+	if [[ -z "$CHANGE" ]]; then
+		read -e -p "Please enter a branch to push to: " -i "$TRACK" choice
+		TRACK=${choice:-$TRACK}
+		read -p "Optionally choose a topic [no topic]: " topic
+
 		change_args="$REMOTE HEAD:refs/for/$TRACK"
 		if [[ -n "$topic" ]]; then
 			change_args="$change_args/$topic"
 		fi
 	else
-		change_args="$REMOTE HEAD:refs/changes/$change"
+		change_args="$REMOTE HEAD:refs/changes/$CHANGE"
 	fi
 
 	git push $change_args ||
@@ -320,7 +322,7 @@ pushReview() {
 
 	git_push_output=$(test -f $GIT_OUTPUT_FILE && cat $GIT_OUTPUT_FILE)
 
-	if [[ "$CURRENT" = "$TRACK" ]]; then
+	if [[ "$CURRENT" = "$TRACK" ]] && ask_yes_no "Reset to $REMOTE/$TRACK?"; then
 		git reset --hard $REMOTE/$TRACK ||
 			die "Could not reset your $TRACK branch to $REMOTE/$TRACK."
 	fi
@@ -347,29 +349,19 @@ pushReview() {
 # git review 100
 startReview() {
 	abort_on_bad_repo_state
-	getBranchInfo
-
-	# $GIT remote show -n changes 2>/dev/null 1>&2 ||
-		#   die "In order to use $this to start a review, you need a 'changes' remote. Please add it before trying again."
-
-	# pick up the latest patch for the changeset we're reviewing
-	# git fetch changes ||
-		#   die "Unable to fetch changes, please check your network connection"
-
-	local change=$1
 
 	# create a new branch based on the current tracking branch to work in
-	local branch=r$change
-	$GIT branch -D $branch 2>/dev/null 1>&2
+	local branch=r$CHANGE
+	git branch -D $branch 2>/dev/null 1>&2
 	git checkout -b $branch $TRACK ||
 		die "Unable to create a new branch '$branch'"
 
 	# apply the change to the new branch
-	gerrit-cherry-pick --latest $REMOTE $change ||
-		die "Unable to apply ±$change on top of $TRACK"
+	gerrit-cherry-pick --latest $REMOTE $CHANGE ||
+		die "Unable to apply ±$CHANGE on top of $TRACK"
 
 	if [[ "$verbose" = true ]]; then
-		good "Successfully cherry-picked ±$change so you can begin reviewing it"
+		good "Successfully cherry-picked ±$CHANGE so you can begin reviewing it"
 	fi
 }
 
@@ -479,7 +471,7 @@ diffPatches() {
 		3)
 			local change=$1
 			local patch1=$2
-			local patch2=$2
+			local patch2=$3
 			;;
 		*)
 			printShortUsage
@@ -624,6 +616,7 @@ abort_on_bad_repo_state() {
 #### now parse arguments ####
 
 getBranchInfo
+get_change_number_from_branch
 
 while true; do
 	arg=$1
@@ -648,14 +641,18 @@ while true; do
 			exit
 			;;
 		-c)
-			CHANGE=$1
+			if is_integer $1; then
+				CHANGE=$1
+			else
+				die "Change number must be an integer ($1)"
+			fi
 			shift
 			;;
 		start)
 			if is_integer $1; then
 				CHANGE=$1
 			fi
-			startReview $1
+			startReview
 			exit
 			;;
 		reset)
@@ -691,7 +688,8 @@ while true; do
 			;;
 		*)
 			if is_integer $arg; then
-				startReview $arg
+				CHANGE=$arg
+				startReview
 				exit
 			else
 				warn "$this: unrecognized option or subcommand $arg"
