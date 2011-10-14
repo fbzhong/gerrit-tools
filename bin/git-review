@@ -184,9 +184,13 @@ DESCRIPTION
     All parameters are optional. By default approve will vote both verified and
     code-review +1 without supplying a message.
 
-  reset
+  reset [-f]
     Removes the current change branch created by the "start" subcommand and switches
     back to tracking branch.
+    Use -f to reset if the current branch has uncommitted changes, otherwise reset will
+    refuse to do this.
+    If the the current branch does not start with "r" followed by an integer, nothing
+    will be done and $this exists with an error.
 
   diff [<patch number> [<patch number>]]
     Depending of the number of arguments, displays a diff of
@@ -372,12 +376,11 @@ startReview() {
 
 # git review reset
 resetReview() {
-	abort_on_bad_repo_state
 
-	if [[ ! -z "$@" ]]; then
-		warn "$this: unrecognized argument $1 for 'reset' subcommand"
-		printUsage
-		exit 2
+	if [[ "$1" == "-f" ]]; then
+		git reset --hard
+	else
+		abort_on_bad_repo_state
 	fi
 
 	# clean up after gerrit-cherry-pick if it failed
@@ -385,8 +388,12 @@ resetReview() {
 	# clean up TRACK file
 	rm -rf "$GIT_DIR/TRACK"
 
-	git checkout $TRACK && $GIT branch -D $CURRENT ||
-		die "Unable to close the review branch $CURRENT"
+	if [[ ${CURRENT:0:1} == "r" ]] && is_integer ${CURRENT:1}; then
+		git checkout $TRACK && $GIT branch -D $CURRENT ||
+			die "Unable to close the review branch $CURRENT"
+	else
+		die "We are not on a review branch ($CURRENT)"
+	fi
 }
 
 approveChange() {
@@ -652,7 +659,7 @@ while true; do
 			exit
 			;;
 		reset)
-			resetReview $@
+			resetReview $1
 			exit
 			;;
 		push)
