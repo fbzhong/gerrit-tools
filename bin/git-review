@@ -12,6 +12,8 @@ RED="\033[0;31m"
 YELLOW="\033[1;33m"
 GREEN="\033[0;32m"
 NO_COLOR="\033[0m"
+BOLD="\033[1m"
+UNDERLINE="\033[4m"
 
 die() {
 	echo -e "${RED}${@}${NO_COLOR}"
@@ -39,6 +41,7 @@ if [[ -z "$GERRIT_CHERRY_PICK" ]]; then
 	die "gerrit-cherry-pick is not installed"
 fi
 
+# creates a new unique output file by using the current process ID
 GIT_OUTPUT_FILE="/tmp/git_output$$"
 
 GIT_DIR=$($GIT rev-parse --git-dir 2>/dev/null)
@@ -127,76 +130,84 @@ patch_count_for_change() {
 }
 
 printShortUsage() {
-	echo "Usage: $this [<options>] push [<change number>]|[-t <topic>]"
-	echo "   or: $this [<options>] <change number>"
-	echo "   or: $this [<options>] reset"
-	echo "   or: $this [<options>] diff [<patchset1> [<patchset2>]]"
+	cat << EOF
+Usage: $this [<options>] push [<change number>]|[-t <topic>]
+   or: $this [<options>] <change number>
+   or: $this [<options>] reset
+   or: $this [<options>] diff [<patchset1> [<patchset2>]]
+EOF
 }
 printUsage() {
 	printShortUsage
-	echo
-	echo "OPTIONS"
-	echo "  -h  --help                  Show this message"
-	echo "  -v  --verbose               Show all commands before running them (default: on)"
-	echo "  -q  --quiet                 Don't display commands before running them (default: off)"
-	echo "  -e  --explain  --dry-run    Don't actually run commands (default: off)"
-	echo
-	echo "DESCRIPTION"
-	echo "  $this assists in code reviews with gerrit, both pushing or pulling changesets"
-	echo "    to review."
-	echo
-	echo "  push [<change number>]|[-t <topic>]"
-	echo "    Pushes a single patch to gerrit for review. If your HEAD is a tracking branch"
-	echo "    $this will reset it to the remote branch after successfully pushing the changeset."
-	echo "    If you are working on a non-tracking branch, that branch will be left alone."
-	echo
-	echo "    Given a change number, the current patch will replace the existing one, following"
-	echo "    the same reset rules as above. The change number must be an integer."
-	echo "    If you give a topic with -t <topic> it will push into according topic"
-	echo "    You can only specify either one."
-	echo
-	echo "    NOTE: If the BROWSER environment variable is set, the Gerrit page for the pushed"
-	echo "    change will be opened in that browser (e.g. 'open' or '/usr/local/bin/firefox'),"
-	echo "    otherwise the URL will be displayed."
-	echo
-	echo "  <change number>"
-	echo "    Applies the latest patch for the change at <change number> on top of the current"
-	echo "    branch, if it's a tracking branch, or master on a branch named for <change number>,"
-	echo "    allowing you to review the change."
-	echo
-	echo "  update"
-	echo "    Updates the review branch that you're currently on to the latest patch."
-	echo
-	echo "  approve [-r|-c|--code-review <+1>] [-v|--verified <+1>] [-m]"
-	echo "    Approves the current patch but does not merge it."
-	echo "    You can select your vote by giving them as argument. E.g. approve -r +2 -v -1 will"
-	echo "    result in voting +2 for code review and -1 for verified."
-	echo "    You can specify a message with -m. You will be promped to enter one."
-	echo "    Hit return to not send a message."
-	echo "    All parameters are optional. By default approve will vote both verified and"
-	echo "    code-review +1 without supplying a message."
-	echo
-	echo "  reset"
-	echo "    Removes the current change branch created by the 'start' subcommand and switches"
-	echo "    back to tracking branch."
-	echo
-	echo "  diff [<patch number> [<patch number>]]"
-	echo "    Depending of the number of arguments, displays a diff of"
-	echo "      (0) the last two patchsets."
-	echo "      (1) the given patchset und the last patchset."
-	echo "      (2) the given patchsets. You can swap the two numbers to get an inverse diff."
-	echo "      (3) a specific change specified with <change> <patchset1> <patchset2>. Giving a"
-	echo "          change number means you can use this command without being on a review branch."
-	echo
-	echo "  rebase [<change number>]"
-	echo "    Rebases the latest patch for a given change number (or the current change branch)"
-	echo "    against tracking branch, then submits it as a new patch to that change."
-	echo "    This helps deal with Gerrit's \"Your change could not be merged due to a path"
-	echo "    conflict\" error message."
-	echo
-	echo "  open"
-	echo "    Opens the currently checked-out Gerrit change's page in the browser (given by the"
-	echo "    BROWSER environment variable)."
+
+	cat << EOF
+
+OPTIONS
+  -h  --help                  Show this message
+  -v  --verbose               Show all commands before running them (default: on)
+  -q  --quiet                 Don't display commands before running them (default: off)
+  -e  --explain  --dry-run    Don't actually run commands (default: off)
+  -c <change number>          Force this change number (default: autodetect)
+
+DESCRIPTION
+  $this assists in code reviews with gerrit, both pushing or pulling changesets
+    to review.
+
+  push [<change number>]|[-t <topic>]
+    Pushes a single patch to gerrit for review. If your HEAD is a tracking branch
+    $this will reset it to the remote branch after successfully pushing the changeset.
+    If you are working on a non-tracking branch, that branch will be left alone.
+
+    Given a change number, the current patch will replace the existing one, following
+    the same reset rules as above. The change number must be an integer.
+    If you give a topic with -t <topic> it will push into according topic
+    You can only specify either one.
+
+    NOTE: If the BROWSER environment variable is set, the Gerrit page for the pushed
+    change will be opened in that browser (e.g. "open" or "/usr/local/bin/firefox"),
+    otherwise the URL will be displayed.
+
+  <change number>
+    Applies the latest patch for the change at <change number> on top of the current
+    branch, if it's a tracking branch, or master on a branch named for <change number>,
+    allowing you to review the change.
+
+  update
+    Updates the review branch that you're currently on to the latest patch.
+
+  approve [-r|-c|--code-review <+1>] [-v|--verified <+1>] [-m]
+    Approves the current patch but does not merge it.
+    You can select your vote by giving them as argument. E.g. approve -r +2 -v -1 will
+    result in voting +2 for code review and -1 for verified.
+    You can specify a message with -m. You will be promped to enter one.
+    Hit return to not send a message.
+    All parameters are optional. By default approve will vote both verified and
+    code-review +1 without supplying a message.
+
+  reset
+    Removes the current change branch created by the "start" subcommand and switches
+    back to tracking branch.
+
+  diff [<patch number> [<patch number>]]
+    Depending of the number of arguments, displays a diff of
+      (0) the last two patchsets.
+      (1) the given patchset und the last patchset.
+      (2) the given patchsets. You can swap the two numbers to get an inverse diff.
+      (3) a specific change specified with <change> <patchset1> <patchset2>. Giving a
+          change number means you can use this command without being on a review branch.
+
+  rebase [<change number>]
+    Rebases the latest patch for a given change number (or the current change branch)
+    against tracking branch, then submits it as a new patch to that change.
+    This helps deal with Gerrit\'s "Your change could not be merged due to a path
+    conflict" error message.
+
+  open <change id>
+    Prints the current review URL. If the BROWSER variable is set, it will use it to
+    open the URL in the your specified browser.
+    If a change id is given, it will use that instead of trying to automatically
+    determine it bases on the current branch.
+EOF
 }
 
 
@@ -362,7 +373,6 @@ startReview() {
 # git review reset
 resetReview() {
 	abort_on_bad_repo_state
-	getBranchInfo
 
 	if [[ ! -z "$@" ]]; then
 		warn "$this: unrecognized argument $1 for 'reset' subcommand"
@@ -549,9 +559,6 @@ updateReview() {
 }
 
 openReview() {
-	getBranchInfo
-
-	CHANGE=$1
 
 	if [[ ! -z $CHANGE ]]; then
 		echo "Using change $CHANGE from command line"
@@ -586,7 +593,12 @@ openReview() {
 			warn "BROWSER is not set. Sorry."
 			echo "http://$host/$CHANGE"
 		else
-			eval "$BROWSER http://$host/$CHANGE"
+			if [[ "$verbose" = true ]]; then
+				echo "Using $BROWSER to open http://$host/$CHANGE"
+			fi
+			if [[ "$run" = true ]]; then
+				eval "$BROWSER http://$host/$CHANGE"
+			fi
 		fi
 	else
 		warn "Could not get the URL of gerrit"
@@ -599,10 +611,12 @@ abort_on_bad_repo_state() {
 	if ! no_changes; then
 		die "You have local changes. Please do something with them before using $this"
 	fi
-
-	# $GIT svn info >/dev/null 2>/dev/null &&
-		#  die "$this does not support git-svn repositories."
 }
+
+
+#### now parse arguments ####
+
+getBranchInfo
 
 while true; do
 	arg=$1
@@ -626,7 +640,14 @@ while true; do
 			printUsage
 			exit
 			;;
+		-c)
+			CHANGE=$1
+			shift
+			;;
 		start)
+			if is_integer $1; then
+				CHANGE=$1
+			fi
 			startReview $1
 			exit
 			;;
@@ -655,7 +676,10 @@ while true; do
 			exit
 			;;
 		open)
-			openReview $1
+			if is_integer $1; then
+				CHANGE=$1
+			fi
+			openReview
 			exit
 			;;
 		*)
