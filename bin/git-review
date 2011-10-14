@@ -156,10 +156,16 @@ patch_count_for_change() {
 
 printShortUsage() {
 	cat << EOF
-Usage: $this [<options>] push
-   or: $this [<options>] <change number>
-   or: $this [<options>] reset
+Usage: $this [<options>] <change number>
+   or: $this [<options>] approve
    or: $this [<options>] diff [<patchset1> [<patchset2>]]
+   or: $this [<options>] open [<change number>]
+   or: $this [<options>] push
+   or: $this [<options>] rebase [<change number>]
+   or: $this [<options>] reset [-f]
+   or: $this [<options>] update
+   Options are: -e (explain) -v (verbose) -c (change number)
+                -q (quite)   -h (help)
 EOF
 }
 printUsage() {
@@ -170,13 +176,37 @@ printUsage() {
 OPTIONS
   -h  --help                  Show this message
   -v  --verbose               Show all commands before running them (default: on)
-  -q  --quiet                 Don\'t display commands before running them (default: off)
-  -e  --explain  --dry-run    Don\'t actually run commands (default: off)
+  -q  --quiet                 Don't display commands before running them (default: off)
+  -e  --explain  --dry-run    Don't actually run commands (default: off)
   -c <change number>          Force this change number (default: autodetect)
 
 DESCRIPTION
   $this assists in code reviews with gerrit, both pushing or pulling changesets
     to review.
+
+  <change number>
+    Applies the latest patch for the change at <change number> on top of the current
+    branch, if it's a tracking branch, or master on a branch named for <change number>,
+    allowing you to review the change.
+
+  approve
+    Approves the current patch but does not merge it.
+    You will be promted for your vote and for a message. Alle linesbreaks will be
+    converted to spaces.
+
+  diff [<patch number> [<patch number>]]
+    Depending of the number of arguments, displays a diff of
+      (0) the last two patchsets.
+      (1) the given patchset und the last patchset.
+      (2) the given patchsets. You can swap the two numbers to get an inverse diff.
+      (3) a specific change specified with <change> <patchset1> <patchset2>. Giving a
+          change number means you can use this command without being on a review branch.
+
+  open <change number>
+    Prints the current review URL. If the BROWSER variable is set, it will use it to
+    open the URL in the your specified browser.
+    If a change number is given, it will use that instead of trying to automatically
+    determine it bases on the current branch.
 
   push
     Pushes a single patch (or - if confirmed - multiple patches) to gerrit for review.
@@ -195,22 +225,11 @@ DESCRIPTION
     change will be opened in that browser (e.g. "open" or "/usr/local/bin/firefox"),
     otherwise the URL will be displayed.
 
-  <change number>
-    Applies the latest patch for the change at <change number> on top of the current
-    branch, if it\'s a tracking branch, or master on a branch named for <change number>,
-    allowing you to review the change.
-
-  update
-    Updates the review branch that you\'re currently on to the latest patch.
-
-  approve [-r|-c|--code-review <+1>] [-v|--verified <+1>] [-m]
-    Approves the current patch but does not merge it.
-    You can select your vote by giving them as argument. E.g. approve -r +2 -v -1 will
-    result in voting +2 for code review and -1 for verified.
-    You can specify a message with -m. You will be promped to enter one.
-    Hit return to not send a message.
-    All parameters are optional. By default approve will vote both verified and
-    code-review +1 without supplying a message.
+  rebase [<change number>]
+    Rebases the latest patch for a given change number (or the current change branch)
+    against tracking branch, then submits it as a new patch to that change.
+    This helps deal with Gerrit's "Your change could not be merged due to a path
+    conflict" error message.
 
   reset [-f]
     Removes the current change branch created by the "start" subcommand and switches
@@ -220,25 +239,8 @@ DESCRIPTION
     If the the current branch does not start with "r" followed by an integer, nothing
     will be done and $this exists with an error.
 
-  diff [<patch number> [<patch number>]]
-    Depending of the number of arguments, displays a diff of
-      (0) the last two patchsets.
-      (1) the given patchset und the last patchset.
-      (2) the given patchsets. You can swap the two numbers to get an inverse diff.
-      (3) a specific change specified with <change> <patchset1> <patchset2>. Giving a
-          change number means you can use this command without being on a review branch.
-
-  rebase [<change number>]
-    Rebases the latest patch for a given change number (or the current change branch)
-    against tracking branch, then submits it as a new patch to that change.
-    This helps deal with Gerrit\'s "Your change could not be merged due to a path
-    conflict" error message.
-
-  open <change number>
-    Prints the current review URL. If the BROWSER variable is set, it will use it to
-    open the URL in the your specified browser.
-    If a change number is given, it will use that instead of trying to automatically
-    determine it bases on the current branch.
+  update
+    Updates the review branch that you are currently on to the latest patch.
 EOF
 }
 
@@ -420,7 +422,8 @@ approveChange() {
 	read -e -i "+1" -p "Code review: " CODE_REVIEW
 	CODE_REVIEW="${CODE_REVIEW:-"$plus_one"}"
 
-	echo "You may supply a message. Hit CTRL-D once your are done.\n Linebreaks will be converted to spaces."
+	echo "You may supply a message. Hit CTRL-D once your are done."
+	echo "Linebreaks will be converted to spaces."
 	cat > $GIT_OUTPUT_FILE ||
 		die "Could not write to tempfile $GIT_OUTPUT_FILE"
 
