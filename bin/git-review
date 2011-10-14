@@ -635,7 +635,9 @@ while true; do
 			if is_integer $1; then
 				CHANGE=$1
 			else
-				die "The change number must be an integer."
+				if [[ -n $1 ]]; then
+					die "The change number must be an integer."
+				fi
 			fi
 			startReview
 			exit
@@ -659,7 +661,9 @@ while true; do
 			if is_integer $1; then
 				CHANGE=$1
 			else
-				die "The change number must be an integer."
+				if [[ -n $1 ]]; then
+					die "The change number must be an integer."
+				fi
 			fi
 			rebaseReview
 			exit
@@ -676,7 +680,9 @@ while true; do
 			if is_integer $1; then
 				CHANGE=$1
 			else
-				die "The change number must be an integer."
+				if [[ -n $1 ]]; then
+					die "The change number must be an integer."
+				fi
 			fi
 			openReview
 			exit
