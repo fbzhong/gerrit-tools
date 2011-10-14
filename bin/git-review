@@ -28,11 +28,15 @@ good() {
 	echo -e "${GREEN}${@}${NO_COLOR}"
 }
 
-#git stuff
+# Check commands
 GIT=$(which git)
-
 if [[ -z "$GIT" ]]; then
 	die "git is not installed"
+fi
+
+SSH=$(which ssh)
+if [[ -z "$SSH" ]]; then
+	die "ssh is not installed"
 fi
 
 GERRIT_CHERRY_PICK=$(which gerrit-cherry-pick)
@@ -70,6 +74,16 @@ fi
 
 if [[ "$run" = true ]]; then
 	$GERRIT_CHERRY_PICK $@ 2>&1 | tee /dev/tty > $GIT_OUTPUT_FILE
+	return ${PIPESTATUS[0]}
+fi
+}
+ssh() {
+if [[ "$verbose" = true ]]; then
+	echo -e "+ ${GREEN}ssh $@${NO_COLOR}"
+fi
+
+if [[ "$run" = true ]]; then
+	$SSH $@ 2>&1 | tee /dev/tty > $GIT_OUTPUT_FILE
 	return ${PIPESTATUS[0]}
 fi
 }
@@ -253,39 +267,6 @@ getBranchInfo() {
 	echo "$TRACK" > "$GIT_DIR/TRACK"
 }
 
-
-parseApprove() {
-	CODE_REVIEW="+1"
-	VERIFIED="+1"
-	MESSAGE=""
-
-	while true; do
-		arg=$1
-		shift
-		test -z "$arg" && break;
-
-		case $arg in
-			-r | -c | --code-review)
-				if [[ -n "$1" ]]; then
-					CODE_REVIEW=$1
-					shift
-				fi
-				;;
-			-v | --verified)
-				if [[ -n $1 ]]; then
-					VERIFIED=$1
-					shift
-				fi
-				;;
-			-m | --message)
-				good "Supply a message and press return when you are done. Hit return to not send a message."
-				read MESSAGE
-				;;
-		esac
-	done
-}
-
-
 pushReview() {
 	abort_on_bad_repo_state
 
@@ -422,18 +403,29 @@ approveChange() {
 		port="-p $port"
 	fi
 
-	getBranchInfo
-
-	get_change_number_from_branch ||
-		die "Unable to get change number from $CURRENT"
-	local PATCH=$(patch_count_for_change $CHANGE)
+	if is_integer $CHANGE; then
+		local PATCH=$(patch_count_for_change $CHANGE)
+	else
+		die "You must be on a review branch or provide a change number via\n $this -c # approve"
+	fi
 
 	local LOG=$($GIT log --pretty="format:%s" $REMOTE/$TRACK..HEAD)
 	good "Approving '$LOG'..."
 
-	parseApprove $@
+	local plus_one="+1"
 
-	local CMD="ssh $host $port gerrit approve"
+	read -e -i "+1" -p "Verified: " VERIFIED
+	VERIFIED="${VERIFIED:-$plus_one}"
+	read -e -i "+1" -p "Code review: " CODE_REVIEW
+	CODE_REVIEW="${CODE_REVIEW:-"$plus_one"}"
+
+	echo "You may supply a message. Hit CTRL-D once your are done.\n Linebreaks will be converted to spaces."
+	cat > $GIT_OUTPUT_FILE ||
+		die "Could not write to tempfile $GIT_OUTPUT_FILE"
+
+	MESSAGE=$(cat $GIT_OUTPUT_FILE |tr '\n' ' ')
+
+	local CMD="$host $port gerrit approve"
 	CMD="$CMD --verified=$VERIFIED"
 	CMD="$CMD --code-review=$CODE_REVIEW"
 	CMD="$CMD --project=$project $CHANGE,$PATCH"
@@ -441,12 +433,7 @@ approveChange() {
 		CMD="$CMD --message=\"$MESSAGE\""
 	fi
 
-	if [[ "$run" = true ]]; then
-		$($CMD) ||
-			die "Unable to approve the commit"
-	else
-		warn "running: $CMD"
-	fi
+	ssh $CMD
 }
 
 diffPatches() {
@@ -654,7 +641,7 @@ while true; do
 			exit
 			;;
 		reset)
-			if [[ $1 != "-f" ]]; then
+			if [[ -n $1 ]] && [[ $1 != "-f" ]]; then
 				die "Only -f may be use as an argument for reset"
 			fi
 			resetReview $1
