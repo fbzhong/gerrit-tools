@@ -338,7 +338,7 @@ startReview() {
 
 	# create a new branch based on the current tracking branch to work in
 	local branch=r$CHANGE
-	git branch -D $branch 2>/dev/null 1>&2
+	$GIT branch -D $branch 2>/dev/null 1>&2
 	git checkout -b $branch $TRACK ||
 		die "Unable to create a new branch '$branch'"
 
