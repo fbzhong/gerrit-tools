@@ -191,8 +191,7 @@ DESCRIPTION
 
   approve
     Approves the current patch but does not merge it.
-    You will be promted for your vote and for a message. Alle linesbreaks will be
-    converted to spaces.
+    You will be promted for your vote and for a message.
 
   diff [<patch number> [<patch number>]]
     Depending of the number of arguments, displays a diff of
@@ -422,10 +421,8 @@ approveChange() {
 	read -e -i "+1" -p "Code review: " CODE_REVIEW
 	CODE_REVIEW="${CODE_REVIEW:-"$plus_one"}"
 
-	echo "You may supply a message. Hit CTRL-D once your are done."
-	echo "Linebreaks will be converted to spaces."
-	cat > $GIT_OUTPUT_FILE ||
-		die "Could not write to tempfile $GIT_OUTPUT_FILE"
+	echo "You may supply a message. Hit return once your are done."
+	read -e -p "Message: " MESSAGE
 
 	MESSAGE=$(cat $GIT_OUTPUT_FILE |tr '\n' ' ')
 
