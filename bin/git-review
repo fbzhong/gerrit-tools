@@ -342,7 +342,7 @@ startReview() {
 		die "Unable to create a new branch '$branch'"
 
 	# apply the change to the new branch
-	gerrit-cherry-pick --latest $REMOTE $CHANGE ||
+	gerrit-cherry-pick $REMOTE $CHANGE ||
 		die "Unable to apply ±$CHANGE on top of $TRACK"
 
 	if [[ "$verbose" = true ]]; then

@@ -1,4 +1,5 @@
 #!/bin/sh
+# From Gerrit Code Review 2.2.1
 #
 # Part of Gerrit Code Review (http://code.google.com/p/gerrit/)
 #
@@ -80,7 +81,6 @@ then
   git_am_opt=$(cat "$STATE/git_am_opt")
 fi
 
-use_latest_patchset=
 while test $# != 0
 do
   case "$1" in
@@ -137,9 +137,6 @@ do
   -s|--signoff)
     git_am_opt="$git_am_opt $1"
     ;;
-  -l|--latest)
-    use_latest_patchset=true
-    ;;
   -*)
     usage
     ;;
@@ -157,11 +154,6 @@ get_changeid() {
   esac
 }
 
-get_latest_patchset() {
-  git ls-remote $remote $(to_ref "$1/*") | \
-    sed 's/.*\///g' | sort -n | tail -n1
-}
-
 to_ref() {
   case $1 in
   */*)
@@ -170,12 +162,7 @@ to_ref() {
     ;;
   *)
     change_id=$1
-    if test -z $use_latest_patchset
-    then
-      patchset_id=1
-    else
-      patchset_id=$(get_latest_patchset $change_id)
-    fi
+    patchset_id=1
     ;;
   esac
 

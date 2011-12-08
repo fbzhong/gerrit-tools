@@ -5,7 +5,7 @@ They are improved and maintained to fit the needs of the [TYPO3](http://typo3.or
 
 ## gerrit-cherry-pick
 
-This is a script that allows you to cherry-pick a particular patch from Gerrit, so that it can be reviewed easily. It comes with Gerrit, but is included here because Gerrit 2.1.1.1 does not yet contain support for the `--latest` option.
+This is a script that allows you to cherry-pick a particular patch from Gerrit, so that it can be reviewed easily. It comes from Gerrit 2.2.1.
 
 ## gerrit-setup
 
