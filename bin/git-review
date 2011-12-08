@@ -290,7 +290,7 @@ pushReview() {
 	local change_args=''
 
 	if [[ -z "$CHANGE" ]]; then
-		read -e -p "Please enter a branch to push to: " -i "$TRACK" choice
+		read -e -p "Please enter a branch to push to [$TRACK] : " choice
 		TRACK=${choice:-$TRACK}
 		read -p "Optionally choose a topic [no topic]: " topic
 
@@ -416,15 +416,13 @@ approveChange() {
 
 	local plus_one="+1"
 
-	read -e -i "+1" -p "Verified: " VERIFIED
+	read -e -p "Verified (-1..+1) [+1] : " VERIFIED
 	VERIFIED="${VERIFIED:-$plus_one}"
-	read -e -i "+1" -p "Code review: " CODE_REVIEW
+	read -e -p "Code review (-2..+2) [+1] : " CODE_REVIEW
 	CODE_REVIEW="${CODE_REVIEW:-"$plus_one"}"
 
 	echo "You may supply a message. Hit return once your are done."
 	read -e -p "Message: " MESSAGE
-
-	MESSAGE=$(cat $GIT_OUTPUT_FILE |tr '\n' ' ')
 
 	local CMD="$host $port gerrit approve"
 	CMD="$CMD --verified=$VERIFIED"
