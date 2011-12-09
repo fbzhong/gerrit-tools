@@ -2,6 +2,11 @@
 
 this=$(basename "$0")
 
+# default settings
+explain=false
+verbose=true
+run=true
+
 # colors
 RED="\033[0;31m"
 YELLOW="\033[1;33m"
@@ -34,40 +39,265 @@ if [[ -z "$SSH" ]]; then
 	die "ssh is not installed"
 fi
 
+# creates a new unique output file by using the current process ID
+GIT_OUTPUT_FILE="/tmp/git_output$$"
+
 GIT_DIR=$($GIT rev-parse --git-dir 2>/dev/null)
 
 if [[ -z "$GIT_DIR" ]]; then
 	die "$this can only be run from a git repository."
 fi
 
-url_line=$($GIT remote show -n origin | grep "Push  URL: " | head -n1)
-host_and_project=${url_line# *URL: }
+CURRENT=$($GIT symbolic-ref -q HEAD || $GIT rev-parse HEAD)
+CURRENT=${CURRENT#refs/heads/}
 
-host=''
-project=''
-port=''
-
-if [[ "$host_and_project" =~ "ssh://" ]]; then
-	host_and_project=${host_and_project#ssh://}
-	host_and_port=${host_and_project%/*}
-
-	if [[ "$host_and_port" =~ ":" ]]; then
-		host=${host_and_port%:*}
-		port=${host_and_port#*:}
-	else
-		host=${host_and_port}
-		port=""
+git() {
+	if [[ "$verbose" = true ]]; then
+		echo -e "+ ${GREEN}git $@${NO_COLOR}"
 	fi
-	project=${host_and_project#*/}
-else
-	host=${host_and_project%:*}
-	project=${host_and_project#*:}
-	port=""
+
+	if [[ "$run" = true ]]; then
+		$GIT $@ 2>&1 | tee /dev/tty > $GIT_OUTPUT_FILE
+		return ${PIPESTATUS[0]}
+	fi
+}
+ssh() {
+if [[ "$verbose" = true ]]; then
+	echo -e "+ ${GREEN}ssh $@${NO_COLOR}"
 fi
 
-port=${port%/*}
-if [[ ! -z "$port" ]]; then
-	port="-p $port"
+if [[ "$run" = true ]]; then
+	$SSH $@ 2>&1 | tee /dev/tty > $GIT_OUTPUT_FILE
+	return ${PIPESTATUS[0]}
 fi
+}
 
-ssh $host $port gerrit $@
+ask_yes_no() {
+	while true; do
+		read -p "$1 [y/n]: " choice
+			case $choice in
+				y|Y|yes|Yes|YES)
+					return 0
+					;;
+				n|no|No|NO)
+					return 1
+					;;
+				*)
+					warn "Please choose either y or n"
+					;;
+			esac
+	done
+}
+
+trap _cleanup_git_output EXIT
+
+_cleanup_git_output() {
+	rm -f $GIT_OUTPUT_FILE
+}
+
+no_changes () {
+	$GIT diff-index --quiet --cached HEAD -- &&
+		$GIT diff-files --quiet
+}
+
+printShortUsage() {
+	cat << EOF
+Usage: $this [<options>] push
+   or: $this [<options>] merge [branch]
+   Options are: -e (explain) -v (verbose)
+                -q (quite)   -h (help)
+EOF
+}
+printUsage() {
+	printShortUsage
+
+	cat << EOF
+
+OPTIONS
+  -h  --help                  Show this message
+  -v  --verbose               Show all commands before running them (default: on)
+  -q  --quiet                 Don't display commands before running them (default: off)
+  -e  --explain  --dry-run    Don't actually run commands (default: off)
+
+DESCRIPTION
+  $this assists in code reviews with gerrit, squash merge local branch to gerrit branch,
+  or push commit for review.
+
+  push
+    Pushes a single patch (or - if confirmed - multiple patches) to gerrit for review.
+    If you are not on a review branch, you need to confirm the branch to push to and
+    you may choose a topic.
+
+    If your HEAD is a tracking branch $this will promt to reset it to the remote
+    branch after successfully pushing the changeset.
+    If you are working on a non-tracking branch, that branch will be left alone.
+
+    If you are on a review branch or if you have specified a change number with -c
+    (see above), the current patch will be added as a new patchset, following
+    the same reset rules as above.
+
+    NOTE: If the BROWSER environment variable is set, the Gerrit page for the pushed
+    change will be opened in that browser (e.g. "open" or "/usr/local/bin/firefox"),
+    otherwise the URL will be displayed.
+
+  merge [branch]
+    Merge the current gerrit branch with the [branch], with squashing commit.
+
+EOF
+}
+
+
+getBranchInfo() {
+	REMOTE=`$GIT config branch.$CURRENT.remote`
+
+	if [[ -z "$REMOTE" ]]; then
+		REMOTE=origin
+	fi
+
+	TRACK=`$GIT config branch.$CURRENT.merge`
+
+	if [[ -n "$TRACK" ]]; then
+		TRACK=${TRACK#refs/heads/}
+	fi
+
+	if [[ -z "$TRACK" ]]; then
+		if [[ -e "$GIT_DIR/TRACK" ]]; then
+			TRACK=$(cat "$GIT_DIR/TRACK")
+		elif [[ -z "$TRACK" ]]; then
+			TRACK=master
+		fi
+	fi
+
+	echo "$TRACK" > "$GIT_DIR/TRACK"
+}
+
+pushReview() {
+	abort_on_bad_repo_state
+
+	local LOG=$($GIT log --pretty="format:%s" $REMOTE/$TRACK..HEAD)
+	local CHANGESETS=$($GIT rev-list $REMOTE/$TRACK..HEAD | wc -l)
+	local CHANGESETS=${CHANGESETS//[[:space:]]}
+
+	if [[ "$run" = true ]]; then
+		if [[ "$CHANGESETS" = "0" ]]; then
+			die "You have no changes to review. Are you on the right branch?"
+		elif [[ "$CHANGESETS" != "1" ]]; then
+			warn "You have $CHANGESETS changes, but you should only push one at a time. Did you forget to squash your commits?"
+			if ! ask_yes_no "Continue?"; then
+				die "Existing"
+			fi
+		fi
+	fi
+
+
+	local change_args=''
+
+	if [[ -z "$CHANGE" ]]; then
+		read -e -p "Please enter a branch to push to [$TRACK] : " choice
+		TRACK=${choice:-$TRACK}
+		read -p "Optionally choose a topic [no topic]: " topic
+
+		change_args="$REMOTE HEAD:refs/for/$TRACK"
+		if [[ -n "$topic" ]]; then
+			change_args="$change_args/$topic"
+		fi
+	else
+		change_args="$REMOTE HEAD:refs/changes/$CHANGE"
+	fi
+
+	git push $change_args ||
+		die "Could not push your changes for review. Perhaps you need to update first?"
+
+	git_push_output=$(test -f $GIT_OUTPUT_FILE && cat $GIT_OUTPUT_FILE)
+
+	if [[ "$CURRENT" = "$TRACK" ]] && ask_yes_no "Reset to $REMOTE/$TRACK?"; then
+		git reset --hard $REMOTE/$TRACK ||
+			die "Could not reset your $TRACK branch to $REMOTE/$TRACK."
+	fi
+
+	if [[ "$run" = true ]]; then
+		url=$(echo "$git_push_output" | grep http | head -n1)
+
+		if [[ -n "$url" ]]; then
+			if [[ -n "$BROWSER" ]]; then
+				eval "$BROWSER $url"
+			else
+				good $url
+			fi
+		fi
+
+		if [[ "$CURRENT" = "$TRACK" ]]; then
+			good "Successfully pushed '$LOG' for review and reset $TRACK"
+		else
+			good "Successfully pushed '$LOG' for review"
+		fi
+	fi
+}
+
+mergeBranch() {
+	git merge --squash "$1"
+
+	if [ ! "$?" = 0 ] ; then
+		die "You must type a exist branch or commit"
+	fi
+
+	if [[ "$run" = true ]]; then
+		# echo "Merge branch '${1}' into '${TRACK}'" > "${GIT_DIR}/SQUASH_MSG"
+		echo "" > "${GIT_DIR}/SQUASH_MSG"
+
+		$GIT commit
+	fi
+}
+
+abort_on_bad_repo_state() {
+	if ! no_changes; then
+		die "You have local changes. Please do something with them before using $this"
+	fi
+}
+
+
+#### now parse arguments ####
+
+getBranchInfo
+
+while true; do
+	arg=$1
+	shift
+	test -z "$arg" && break;
+
+	case $arg in
+		-e | --explain | --dry-run)
+			echo "$this: using explain-only mode"
+			explain=true
+			verbose=true
+			run=false
+			;;
+		-v | --verbose)
+			verbose=true
+			;;
+		-q | --quiet)
+			verbose=false
+			;;
+		-h | --help | help)
+			printUsage
+			exit
+			;;
+		merge)
+			mergeBranch $1
+			exit
+			;;
+		push)
+			pushReview
+			exit
+			;;
+		*)
+			warn "$this: unrecognized option or subcommand $arg"
+			printUsage
+			exit 2
+			;;
+	esac
+done
+
+# no subcommand given
+printShortUsage
+exit 2
