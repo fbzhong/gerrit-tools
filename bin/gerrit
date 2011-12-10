@@ -28,7 +28,8 @@ printShortUsage() {
 Usage: $this GERRIT_SSH COMMAND [ARG ...] [--] [--help (-h)]
        $this --help
 
-       GERRIT_SSH are: ssh://id@gerrit_server:port
+       Example: $this -p 29814 gerrit_ssh_server --help
+       	        $this -p 29814 gerrit_ssh_server create-project -n new.git
 
 EOF
 }
@@ -54,7 +55,28 @@ if [ "--help" = "$1" ] ; then
 	exit 0
 fi
 
-SERVER=$1
-shift
+is_gerrit_cmd=0
+ssh_options=""
 
-ssh "$SERVER" gerrit $@
+while true; do
+	if [ "1" = "${is_gerrit_cmd}" ] ; then
+		ssh ${ssh_options} gerrit $@
+		exit
+	fi
+
+	arg=$1
+	shift
+
+	ssh_options="${ssh_options} $arg"
+
+	if [ "${arg:0:1}" = "-" ] ; then
+		ssh_options="${ssh_options} $1"
+		shift
+	else
+		is_gerrit_cmd=1
+	fi
+
+done
+
+printShortUsage
+exit 2
