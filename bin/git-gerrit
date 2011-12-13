@@ -237,12 +237,38 @@ mergeBranch() {
 		die "You must type a exist branch or commit"
 	fi
 
-	if [[ "$run" = true ]]; then
-		# echo "Merge branch '${1}' into '${TRACK}'" > "${GIT_DIR}/SQUASH_MSG"
-		echo "" > "${GIT_DIR}/SQUASH_MSG"
-
-		$GIT commit
+	# find the commits.
+	if [ -e "${GIT_DIR}/SQUASH_MSG_" ] ; then
+		rm "${GIT_DIR}/SQUASH_MSG_"
 	fi
+
+	head=$($GIT rev-parse HEAD)
+	commits=$(fgrep "commit " "${GIT_DIR}/SQUASH_MSG" | awk '{print $2}')
+	for commit in ${commits} ; do
+	    result=$($GIT cat-file commit $commit | grep "parent ${head}")
+	    if [ "" != "${result}" ] ; then
+	        break
+	    fi
+	done
+
+	while read line ; do
+	    result=$(echo ${line} | grep "commit ${commit}")
+	    if [ "" != "${result}" ] ; then
+	        break
+	    fi
+
+	    # ignore the Change-Id: line.
+	    result=$(echo ${line} | grep "Change-Id:")
+	    if [ "" != "${result}" ] ; then
+	    	continue
+	    fi
+
+	    echo ${line} >> "${GIT_DIR}/SQUASH_MSG_"
+	done < "${GIT_DIR}/SQUASH_MSG"
+
+	mv "${GIT_DIR}/SQUASH_MSG_" "${GIT_DIR}/SQUASH_MSG"
+
+	$GIT commit
 }
 
 abort_on_bad_repo_state() {
