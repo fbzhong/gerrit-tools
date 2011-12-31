@@ -16,27 +16,27 @@ BOLD="\033[1m"
 UNDERLINE="\033[4m"
 
 die() {
-	echo -e "${RED}${@}${NO_COLOR}"
-	exit 1
+    echo -e "${RED}${@}${NO_COLOR}"
+    exit 1
 }
 
 warn() {
-	echo -e "${YELLOW}${@}${NO_COLOR}"
+    echo -e "${YELLOW}${@}${NO_COLOR}"
 }
 
 good() {
-	echo -e "${GREEN}${@}${NO_COLOR}"
+    echo -e "${GREEN}${@}${NO_COLOR}"
 }
 
 # Check commands
 GIT=$(which git)
 if [[ -z "$GIT" ]]; then
-	die "git is not installed"
+    die "git is not installed"
 fi
 
 SSH=$(which ssh)
 if [[ -z "$SSH" ]]; then
-	die "ssh is not installed"
+    die "ssh is not installed"
 fi
 
 # creates a new unique output file by using the current process ID
@@ -45,73 +45,74 @@ GIT_OUTPUT_FILE="/tmp/git_output$$"
 GIT_DIR=$($GIT rev-parse --git-dir 2>/dev/null)
 
 if [[ -z "$GIT_DIR" ]]; then
-	die "$this can only be run from a git repository."
+    die "$this can only be run from a git repository."
 fi
 
 CURRENT=$($GIT symbolic-ref -q HEAD || $GIT rev-parse HEAD)
 CURRENT=${CURRENT#refs/heads/}
 
 git() {
-	if [[ "$verbose" = true ]]; then
-		echo -e "+ ${GREEN}git $@${NO_COLOR}"
-	fi
+    if [[ "$verbose" = true ]]; then
+        echo -e "+ ${GREEN}git $@${NO_COLOR}"
+    fi
 
-	if [[ "$run" = true ]]; then
-		$GIT $@ 2>&1 | tee /dev/tty > $GIT_OUTPUT_FILE
-		return ${PIPESTATUS[0]}
-	fi
+    if [[ "$run" = true ]]; then
+        $GIT $@ 2>&1 | tee /dev/tty > $GIT_OUTPUT_FILE
+        return ${PIPESTATUS[0]}
+    fi
 }
 ssh() {
 if [[ "$verbose" = true ]]; then
-	echo -e "+ ${GREEN}ssh $@${NO_COLOR}"
+    echo -e "+ ${GREEN}ssh $@${NO_COLOR}"
 fi
 
 if [[ "$run" = true ]]; then
-	$SSH $@ 2>&1 | tee /dev/tty > $GIT_OUTPUT_FILE
-	return ${PIPESTATUS[0]}
+    $SSH $@ 2>&1 | tee /dev/tty > $GIT_OUTPUT_FILE
+    return ${PIPESTATUS[0]}
 fi
 }
 
 ask_yes_no() {
-	while true; do
-		read -p "$1 [y/n]: " choice
-			case $choice in
-				y|Y|yes|Yes|YES)
-					return 0
-					;;
-				n|no|No|NO)
-					return 1
-					;;
-				*)
-					warn "Please choose either y or n"
-					;;
-			esac
-	done
+    while true; do
+        read -p "$1 [y/n]: " choice
+            case $choice in
+                y|Y|yes|Yes|YES)
+                    return 0
+                    ;;
+                n|no|No|NO)
+                    return 1
+                    ;;
+                *)
+                    warn "Please choose either y or n"
+                    ;;
+            esac
+    done
 }
 
 trap _cleanup_git_output EXIT
 
 _cleanup_git_output() {
-	rm -f $GIT_OUTPUT_FILE
+    rm -f $GIT_OUTPUT_FILE
 }
 
 no_changes () {
-	$GIT diff-index --quiet --cached HEAD -- &&
-		$GIT diff-files --quiet
+    $GIT diff-index --quiet --cached HEAD -- &&
+        $GIT diff-files --quiet
 }
 
 printShortUsage() {
-	cat << EOF
+    cat << EOF
 Usage: $this [<options>] push
    or: $this [<options>] merge [branch]
+   or: $this [<options>] setup
    Options are: -e (explain) -v (verbose)
                 -q (quite)   -h (help)
 EOF
 }
 printUsage() {
-	printShortUsage
+    printShortUsage
 
-	cat << EOF
+    cat << EOF
 
 OPTIONS
   -h  --help                  Show this message
@@ -143,138 +144,186 @@ DESCRIPTION
   merge [branch]
     Merge the current gerrit branch with the [branch], with squashing commit.
 
+  setup
+    Setup the gerrit hook.
+
 EOF
 }
 
+getHostAndPort() {
+    url_line=$($GIT remote show -n origin | grep "Push  URL: " | head -n1)
+    host_and_project=${url_line# *URL: }
+
+    host=''
+    project=''
+    port=''
+
+    if [[ "$host_and_project" =~ "ssh://" ]]; then
+      host_and_project=${host_and_project#ssh://}
+      host_and_port=${host_and_project%%/*}
+
+      if [[ "$host_and_port" =~ ":" ]]; then
+        host=${host_and_port%:*}
+        port=${host_and_port#*:}
+      else
+        host=${host_and_port}
+        port=""
+      fi
+      project=${host_and_project#*/}
+    else
+      host=${host_and_project%:*}
+      project=${host_and_project#*:}
+      port=""
+    fi
+
+    port=${port%/*}
+    if [[ ! -z "$port" ]]; then
+      port="-p $port"
+    fi
+}
+
+setupHook() {
+    local commit_hook="${GIT_DIR}/hooks/commit-msg"
+
+    if [ -x "${commit_hook}" ] ; then
+        echo "gerrit commit-msg hook works well."
+        return
+    fi
+
+    getHostAndPort
+    scp $port $host:hooks/commit-msg "${commit_hook}" || die "failed to add gerrit commit-msg hook."
+    chmod +x "${commit_hook}"
+    echo "gerrit commit-msg hook setup correctly."
+}
 
 getBranchInfo() {
-	REMOTE=`$GIT config branch.$CURRENT.remote`
+    REMOTE=`$GIT config branch.$CURRENT.remote`
 
-	if [[ -z "$REMOTE" ]]; then
-		REMOTE=origin
-	fi
+    if [[ -z "$REMOTE" ]]; then
+        REMOTE=origin
+    fi
 
-	TRACK=`$GIT config branch.$CURRENT.merge`
+    TRACK=`$GIT config branch.$CURRENT.merge`
 
-	if [[ -n "$TRACK" ]]; then
-		TRACK=${TRACK#refs/heads/}
-	fi
+    if [[ -n "$TRACK" ]]; then
+        TRACK=${TRACK#refs/heads/}
+    fi
 
-	if [[ -z "$TRACK" ]]; then
-		TRACK=$CURRENT
-	fi
+    if [[ -z "$TRACK" ]]; then
+        TRACK=$CURRENT
+    fi
 
-	echo "$TRACK" > "$GIT_DIR/TRACK"
+    echo "$TRACK" > "$GIT_DIR/TRACK"
 }
 
 pushReview() {
-	abort_on_bad_repo_state
+    abort_on_bad_repo_state
 
-	local LOG=$($GIT log --pretty="format:%s" $REMOTE/$TRACK..HEAD)
-	local CHANGESETS=$($GIT rev-list $REMOTE/$TRACK..HEAD | wc -l)
-	local CHANGESETS=${CHANGESETS//[[:space:]]}
+    local LOG=$($GIT log --pretty="format:%s" $REMOTE/$TRACK..HEAD)
+    local CHANGESETS=$($GIT rev-list $REMOTE/$TRACK..HEAD | wc -l)
+    local CHANGESETS=${CHANGESETS//[[:space:]]}
 
-	if [[ "$run" = true ]]; then
-		if [[ "$CHANGESETS" = "0" ]]; then
-			die "You have no changes to review. Are you on the right branch?"
-		elif [[ "$CHANGESETS" != "1" ]]; then
-			warn "You have $CHANGESETS changes, but you should only push one at a time. Did you forget to squash your commits?"
-			if ! ask_yes_no "Continue?"; then
-				die "Existing"
-			fi
-		fi
-	fi
+    if [[ "$run" = true ]]; then
+        if [[ "$CHANGESETS" = "0" ]]; then
+            die "You have no changes to review. Are you on the right branch?"
+        elif [[ "$CHANGESETS" != "1" ]]; then
+            warn "You have $CHANGESETS changes, but you should only push one at a time. Did you forget to squash your commits?"
+            if ! ask_yes_no "Continue?"; then
+                die "Existing"
+            fi
+        fi
+    fi
 
 
-	local change_args=''
+    local change_args=''
 
-	if [[ -z "$CHANGE" ]]; then
-		read -e -p "Please enter a branch to push to [$TRACK] : " choice
-		TRACK=${choice:-$TRACK}
-		read -p "Optionally choose a topic [no topic]: " topic
+    if [[ -z "$CHANGE" ]]; then
+        read -e -p "Please enter a branch to push to [$TRACK] : " choice
+        TRACK=${choice:-$TRACK}
+        read -p "Optionally choose a topic [no topic]: " topic
 
-		change_args="$REMOTE HEAD:refs/for/$TRACK"
-		if [[ -n "$topic" ]]; then
-			change_args="$change_args/$topic"
-		fi
-	else
-		change_args="$REMOTE HEAD:refs/changes/$CHANGE"
-	fi
+        change_args="$REMOTE HEAD:refs/for/$TRACK"
+        if [[ -n "$topic" ]]; then
+            change_args="$change_args/$topic"
+        fi
+    else
+        change_args="$REMOTE HEAD:refs/changes/$CHANGE"
+    fi
 
-	git push $change_args ||
-		die "Could not push your changes for review. Perhaps you need to update first?"
+    git push $change_args ||
+        die "Could not push your changes for review. Perhaps you need to update first?"
 
-	git_push_output=$(test -f $GIT_OUTPUT_FILE && cat $GIT_OUTPUT_FILE)
+    git_push_output=$(test -f $GIT_OUTPUT_FILE && cat $GIT_OUTPUT_FILE)
 
-	#if [[ "$CURRENT" = "$TRACK" ]] && ask_yes_no "Reset to $REMOTE/$TRACK?"; then
-	#	git reset --hard $REMOTE/$TRACK ||
-	#		die "Could not reset your $TRACK branch to $REMOTE/$TRACK."
-	#fi
+    #if [[ "$CURRENT" = "$TRACK" ]] && ask_yes_no "Reset to $REMOTE/$TRACK?"; then
+    #    git reset --hard $REMOTE/$TRACK ||
+    #        die "Could not reset your $TRACK branch to $REMOTE/$TRACK."
+    #fi
 
-	if [[ "$run" = true ]]; then
-		url=$(echo "$git_push_output" | grep http | head -n1)
+    if [[ "$run" = true ]]; then
+        url=$(echo "$git_push_output" | grep http | head -n1)
 
-		if [[ -n "$url" ]]; then
-			if [[ -n "$BROWSER" ]]; then
-				eval "$BROWSER $url"
-			else
-				good $url
-			fi
-		fi
+        if [[ -n "$url" ]]; then
+            if [[ -n "$BROWSER" ]]; then
+                eval "$BROWSER $url"
+            else
+                good $url
+            fi
+        fi
 
-		if [[ "$CURRENT" = "$TRACK" ]]; then
-			good "Successfully pushed '$LOG' for review and reset $TRACK"
-		else
-			good "Successfully pushed '$LOG' for review"
-		fi
-	fi
+        if [[ "$CURRENT" = "$TRACK" ]]; then
+            good "Successfully pushed '$LOG' for review and reset $TRACK"
+        else
+            good "Successfully pushed '$LOG' for review"
+        fi
+    fi
 }
 
 mergeBranch() {
-	git merge --squash "$1"
+    git merge --squash "$1"
 
-	if [ ! "$?" = 0 ] ; then
-		die "You must type a exist branch or commit"
-	fi
+    if [ ! "$?" = 0 ] ; then
+        die "You must type a exist branch or commit"
+    fi
 
-	# find the commits.
-	if [ -e "${GIT_DIR}/SQUASH_MSG_" ] ; then
-		rm "${GIT_DIR}/SQUASH_MSG_"
-	fi
+    # find the commits.
+    if [ -e "${GIT_DIR}/SQUASH_MSG_" ] ; then
+        rm "${GIT_DIR}/SQUASH_MSG_"
+    fi
 
-	head=$($GIT rev-parse HEAD)
-	commits=$(fgrep "commit " "${GIT_DIR}/SQUASH_MSG" | awk '{print $2}')
-	for commit in ${commits} ; do
-	    result=$($GIT cat-file commit $commit | grep "parent ${head}")
-	    if [ "" != "${result}" ] ; then
-	        break
-	    fi
-	done
+    head=$($GIT rev-parse HEAD)
+    commits=$(fgrep "commit " "${GIT_DIR}/SQUASH_MSG" | awk '{print $2}')
+    for commit in ${commits} ; do
+        result=$($GIT cat-file commit $commit | grep "parent ${head}")
+        if [ "" != "${result}" ] ; then
+            break
+        fi
+    done
 
-	while read line ; do
-	    result=$(echo ${line} | grep "commit ${commit}")
-	    if [ "" != "${result}" ] ; then
-	        break
-	    fi
+    while read line ; do
+        result=$(echo ${line} | grep "commit ${commit}")
+        if [ "" != "${result}" ] ; then
+            break
+        fi
 
-	    # ignore the Change-Id: line.
-	    result=$(echo ${line} | grep "Change-Id:")
-	    if [ "" != "${result}" ] ; then
-	    	continue
-	    fi
+        # ignore the Change-Id: line.
+        result=$(echo ${line} | grep "Change-Id:")
+        if [ "" != "${result}" ] ; then
+            continue
+        fi
 
-	    echo ${line} >> "${GIT_DIR}/SQUASH_MSG_"
-	done < "${GIT_DIR}/SQUASH_MSG"
+        echo ${line} >> "${GIT_DIR}/SQUASH_MSG_"
+    done < "${GIT_DIR}/SQUASH_MSG"
 
-	mv "${GIT_DIR}/SQUASH_MSG_" "${GIT_DIR}/SQUASH_MSG"
+    mv "${GIT_DIR}/SQUASH_MSG_" "${GIT_DIR}/SQUASH_MSG"
 
-	$GIT commit
+    $GIT commit
 }
 
 abort_on_bad_repo_state() {
-	if ! no_changes; then
-		die "You have local changes. Please do something with them before using $this"
-	fi
+    if ! no_changes; then
+        die "You have local changes. Please do something with them before using $this"
+    fi
 }
 
 
@@ -283,41 +332,45 @@ abort_on_bad_repo_state() {
 getBranchInfo
 
 while true; do
-	arg=$1
-	shift
-	test -z "$arg" && break;
+    arg=$1
+    shift
+    test -z "$arg" && break;
 
-	case $arg in
-		-e | --explain | --dry-run)
-			echo "$this: using explain-only mode"
-			explain=true
-			verbose=true
-			run=false
-			;;
-		-v | --verbose)
-			verbose=true
-			;;
-		-q | --quiet)
-			verbose=false
-			;;
-		-h | --help | help)
-			printUsage
-			exit
-			;;
-		merge)
-			mergeBranch $1
-			exit
-			;;
-		push)
-			pushReview
-			exit
-			;;
-		*)
-			warn "$this: unrecognized option or subcommand $arg"
-			printUsage
-			exit 2
-			;;
-	esac
+    case $arg in
+        -e | --explain | --dry-run)
+            echo "$this: using explain-only mode"
+            explain=true
+            verbose=true
+            run=false
+            ;;
+        -v | --verbose)
+            verbose=true
+            ;;
+        -q | --quiet)
+            verbose=false
+            ;;
+        -h | --help | help)
+            printUsage
+            exit
+            ;;
+        merge)
+            mergeBranch $1
+            exit
+            ;;
+        push)
+            pushReview
+            exit
+            ;;
+        setup)
+            setupHook
+            exit
+            ;;
+        *)
+            warn "$this: unrecognized option or subcommand $arg"
+            printUsage
+            exit 2
+            ;;
+    esac
 done
 
 # no subcommand given
