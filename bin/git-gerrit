@@ -100,67 +100,21 @@ no_changes () {
         $GIT diff-files --quiet
 }
 
-printShortUsage() {
-    cat << EOF
-Usage: $this [<options>] push
-   or: $this [<options>] merge [branch]
-   or: $this [<options>] setup
-   Options are: -e (explain) -v (verbose)
-                -q (quite)   -h (help)
-EOF
-}
-printUsage() {
-    printShortUsage
+getGerritServerAndProject() {
+    if [ "" != "${host}" ] ; then
+        return
+    fi
 
-    cat << EOF
-
-OPTIONS
-  -h  --help                  Show this message
-  -v  --verbose               Show all commands before running them (default: on)
-  -q  --quiet                 Don't display commands before running them (default: off)
-  -e  --explain  --dry-run    Don't actually run commands (default: off)
-
-DESCRIPTION
-  $this assists in code reviews with gerrit, squash merge local branch to gerrit branch,
-  or push commit for review.
-
-  push
-    Pushes a single patch (or - if confirmed - multiple patches) to gerrit for review.
-    If you are not on a review branch, you need to confirm the branch to push to and
-    you may choose a topic.
-
-    If your HEAD is a tracking branch $this will promt to reset it to the remote
-    branch after successfully pushing the changeset.
-    If you are working on a non-tracking branch, that branch will be left alone.
-
-    If you are on a review branch or if you have specified a change number with -c
-    (see above), the current patch will be added as a new patchset, following
-    the same reset rules as above.
-
-    NOTE: If the BROWSER environment variable is set, the Gerrit page for the pushed
-    change will be opened in that browser (e.g. "open" or "/usr/local/bin/firefox"),
-    otherwise the URL will be displayed.
-
-  merge [branch]
-    Merge the current gerrit branch with the [branch], with squashing commit.
-
-  setup
-    Setup the gerrit hook.
-
-EOF
-}
-
-getHostAndPort() {
-    url_line=$($GIT remote show -n origin | grep "Push  URL: " | head -n1)
-    host_and_project=${url_line# *URL: }
+    local url_line=$($GIT remote show -n origin | grep "Push  URL: " | head -n1)
+    local host_and_project=${url_line# *URL: }
 
     host=''
     project=''
     port=''
 
     if [[ "$host_and_project" =~ "ssh://" ]]; then
-      host_and_project=${host_and_project#ssh://}
-      host_and_port=${host_and_project%%/*}
+      local host_and_project=${host_and_project#ssh://}
+      local host_and_port=${host_and_project%%/*}
 
       if [[ "$host_and_port" =~ ":" ]]; then
         host=${host_and_port%:*}
@@ -176,24 +130,17 @@ getHostAndPort() {
       port=""
     fi
 
+    project=${project%.git}
+
     port=${port%/*}
     if [[ ! -z "$port" ]]; then
       port="-p $port"
     fi
 }
 
-setupHook() {
-    local commit_hook="${GIT_DIR}/hooks/commit-msg"
-
-    if [ -x "${commit_hook}" ] ; then
-        echo "gerrit commit-msg hook works well."
-        return
-    fi
-
-    getHostAndPort
-    scp $port $host:hooks/commit-msg "${commit_hook}" || die "failed to add gerrit commit-msg hook."
-    chmod +x "${commit_hook}"
-    echo "gerrit commit-msg hook setup correctly."
+executeGerritCommand() {
+    getGerritServerAndProject
+    ssh $port $host gerrit $@
 }
 
 getBranchInfo() {
@@ -326,6 +273,82 @@ abort_on_bad_repo_state() {
     fi
 }
 
+setupHook() {
+    local commit_hook="${GIT_DIR}/hooks/commit-msg"
+
+    if [ -x "${commit_hook}" ] ; then
+        echo "gerrit commit-msg hook works well."
+        return
+    fi
+
+    getGerritServerAndProject
+    scp $port $host:hooks/commit-msg "${commit_hook}" || die "failed to add gerrit commit-msg hook."
+    chmod +x "${commit_hook}"
+    echo "gerrit commit-msg hook setup correctly."
+}
+
+queryOpenChanges() {
+    getGerritServerAndProject
+    executeGerritCommand "query" "status:open" "project:${project}"
+}
+
+#### usage ####
+
+
+printShortUsage() {
+    cat << EOF
+Usage: $this [<options>] push
+   or: $this [<options>] merge [branch]
+   or: $this [<options>] setup
+   or: $this [<options>] changes
+   or: $this [<options>] review [number]
+   Options are: -e (explain) -v (verbose)
+                -q (quite)   -h (help)
+EOF
+}
+printUsage() {
+    printShortUsage
+
+    cat << EOF
+
+OPTIONS
+  -h  --help                  Show this message
+  -v  --verbose               Show all commands before running them (default: on)
+  -q  --quiet                 Don't display commands before running them (default: off)
+  -e  --explain  --dry-run    Don't actually run commands (default: off)
+
+DESCRIPTION
+  $this assists in code reviews with gerrit, squash merge local branch to gerrit branch,
+  or push commit for review.
+
+  push
+    Pushes a single patch (or - if confirmed - multiple patches) to gerrit for review.
+    If you are not on a review branch, you need to confirm the branch to push to and
+    you may choose a topic.
+
+    If your HEAD is a tracking branch $this will promt to reset it to the remote
+    branch after successfully pushing the changeset.
+    If you are working on a non-tracking branch, that branch will be left alone.
+
+    If you are on a review branch or if you have specified a change number with -c
+    (see above), the current patch will be added as a new patchset, following
+    the same reset rules as above.
+
+    NOTE: If the BROWSER environment variable is set, the Gerrit page for the pushed
+    change will be opened in that browser (e.g. "open" or "/usr/local/bin/firefox"),
+    otherwise the URL will be displayed.
+
+  merge [branch]
+    Merge the current gerrit branch with the [branch], with squashing commit.
+
+  setup
+    Setup the gerrit hook.
+
+  changes
+    Query the open changes.
+
+EOF
+}
 
 #### now parse arguments ####
 
@@ -363,6 +386,10 @@ while true; do
             ;;
         setup)
             setupHook
+            exit
+            ;;
+        changes)
+            queryOpenChanges
             exit
             ;;
         *)

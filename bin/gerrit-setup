@@ -65,6 +65,8 @@ else
   port=""
 fi
 
+project=${project%.git}
+
 port=${port%/*}
 if [[ ! -z "$port" ]]; then
   port="-p $port"
