@@ -1,3 +1,11 @@
+# No Longer Maintained
+
+Since I have forked a new repo named [git-gerrit](https://github.com/fbzhong/git-gerrit), this repo is no longer maintained.
+
+# New Fork [git-gerrit](https://github.com/fbzhong/git-gerrit)
+
+Please visit the new fork [git-gerrit](https://github.com/fbzhong/git-gerrit).
+
 # Gerrit Tools
 
 A few scripts to make code review via [Gerrit Code Review](http://gerrit.googlecode.com) easier for developers.
