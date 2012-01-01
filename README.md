@@ -46,6 +46,7 @@ And looks like this for people reviewing someone else's changeset:
     Usage: git-gerrit [<options>] init
        or: git-gerrit [<options>] merge <branch>
        or: git-gerrit [<options>] push
+       or: git-gerrit [<options>] changes [<search operators>]
        or: git-gerrit [<options>] changes [<change number>]
        or: git-gerrit [<options>] apply <change number>
        or: git-gerrit [<options>] reset [-f]
@@ -80,7 +81,20 @@ And looks like this for people reviewing someone else's changeset:
       otherwise the URL will be displayed.
 
     changes [<change number>]
-      Show the open changes, or the detail of <change number>.
+      Show the detail of specific <change number>.
+
+    changes [<search operators>]
+      Show the changes information, <status:open> by default. The <search operators> are
+      the same with the operators of Gerrit Code Review - Searching Changes.
+
+      The following are particial <search operators>:
+          commit:'SHA1'
+          status:open
+          status:merged
+          status:abandoned
+
+      For more information of <search operators>, please refer to the Gerrit Documentation
+      Gerrit Code Review - Searching Changes
 
     apply <change number>
       Applies the latest patch for the change at <change number> on top of the current

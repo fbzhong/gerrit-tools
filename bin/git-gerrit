@@ -588,16 +588,20 @@ initGerrit() {
     echo "gerrit commit-msg hook setup correctly."
 }
 
-queryOpenChanges() {
+queryChanges() {
+    local operators=$@
+    if [ "" = "$1" ] ; then
+        operators="status:open"
+    fi
     getGerritServerAndProject
-    executeGerritCommand "query" "--current-patch-set" "status:open" "project:${project}"
+    executeGerritCommand "query" "--current-patch-set" "project:${project}" $operators
     echo "$gerrit_command_result" | less -FRSX
 }
 
 queryChangesDetail() {
     getGerritServerAndProject
-    executeGerritCommand "query" "--current-patch-set" "--patch-sets" "status:open" "project:${project}"
-    echo "$gerrit_command_result" | less -FRSX -p"number: $1"
+    executeGerritCommand "query" "--current-patch-set" "--patch-sets" "change:'$1'" "project:${project}"
+    echo "$gerrit_command_result" | less -FRSX
 }
 
 #### usage ####
@@ -606,6 +610,7 @@ printShortUsage() {
 Usage: $this [<options>] init
    or: $this [<options>] merge <branch>
    or: $this [<options>] push
+   or: $this [<options>] changes [<search operators>]
    or: $this [<options>] changes [<change number>]
    or: $this [<options>] apply <change number>
    or: $this [<options>] reset [-f]
@@ -659,7 +664,20 @@ DESCRIPTION
     otherwise the URL will be displayed.
 
   changes [<change number>]
-    Show the open changes, or the detail of <change number>.
+    Show the detail of specific <change number>.
+
+  changes [<search operators>]
+    Show the changes information, <status:open> by default. The <search operators> are
+    the same with the operators of Gerrit Code Review - Searching Changes.
+
+    The following are particial <search operators>:
+        commit:'SHA1'
+        status:open
+        status:merged
+        status:abandoned
+
+    For more information of <search operators>, please refer to the Gerrit Documentation
+    Gerrit Code Review - Searching Changes
 
   apply <change number>
     Applies the latest patch for the change at <change number> on top of the current
@@ -747,7 +765,7 @@ while true; do
             if is_integer $1; then
                 queryChangesDetail $1
             else
-                queryOpenChanges
+                queryChanges $@
             fi
             exit
             ;;
