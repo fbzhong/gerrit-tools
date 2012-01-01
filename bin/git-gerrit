@@ -638,8 +638,8 @@ DESCRIPTION
   init
     init the gerrit hook.
 
-  merge [branch]
-    Merge the current gerrit branch with the [branch], with squashing commit.
+  merge <branch>
+    Merge the current gerrit branch with the <branch>, with squashing commit.
 
   push
     Pushes a single patch (or - if confirmed - multiple patches) to gerrit for review.
