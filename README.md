@@ -1,4 +1,4 @@
-# gerrit Tools
+# Gerrit Tools
 
 A few scripts to make code review via [Gerrit Code Review](http://gerrit.googlecode.com) easier for developers.
 They are improved and maintained to fit the needs of the [TYPO3](http://typo3.org) review workflow.
@@ -178,6 +178,36 @@ It will print "git-gerrit can only be run from a git repository." in red (unless
 ### Homebrew install for Mac OS X
 
     brew install https://raw.github.com/fbzhong/homebrew-library/master/Library/gerrit-tools.rb
+
+
+## Bash Completion
+
+ Bash completion support for [git-gerrit](https://github.com/fbzhong/gerrit-tools)
+
+### Installation
+
+ To achieve git-gerrit completion nirvana:
+
+  0. Install git-completion.
+
+  1. Install this file. Either:
+
+     a. Place it in a `bash-completion.d` folder:
+
+        * /etc/bash-completion.d
+        * /usr/local/etc/bash-completion.d
+        * ~/bash-completion.d
+
+     b. Or, copy it somewhere (e.g. ~/.git-gerrit-completion.bash) and put the following line in
+        your .bashrc:
+
+            source ~/.git-gerrit-completion.bash
+
+  2. If you are using Git < 1.7.1: Edit git-completion.sh and add the following line to the giant
+     $command case in _git:
+
+         gerrit)        _git_gerrit ;;
+
 
 ## Contributing
 
